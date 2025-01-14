@@ -88,6 +88,11 @@
             <artifactId>kord-core-jvm</artifactId>
             <version>0.15.0</version>
         </dependency>
+        <dependency>
+            <groupId>org.jetbrains.kotlinx</groupId>
+            <artifactId>kotlinx-io-core-jvm</artifactId>
+            <version>0.6.0</version>
+        </dependency>
     </dependencies>
 
 </project>

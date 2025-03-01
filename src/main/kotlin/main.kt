@@ -14,11 +14,16 @@ private val token: String = try {
 
 suspend fun main() {
   val kord = Kord(token)
+  val mention = "<@1327594330130481272>"
 
   kord.on<MessageCreateEvent> {
     if (message.author?.isBot != false) return@on
-    if (message.content != "<@1327594330130481272> ping") return@on
-    message.channel.createMessage("pong!")
+    if (message.content == "$mention ping") {
+      message.channel.createMessage("pong!")
+    }
+    if (message.content == "$mention hello") {
+      message.channel.createMessage("hello!")
+    }
   }
 
   kord.login {

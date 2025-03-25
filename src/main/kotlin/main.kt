@@ -4,8 +4,6 @@ import dev.kord.gateway.Intent
 import java.io.File
 import java.io.IOException
 import commands.CommandRegistry
-import commands.PingCommand
-import commands.HelloCommand
 
 private val token: String = try {
   File("./.token").readText().trim()
@@ -19,8 +17,9 @@ suspend fun main() {
 
   // Create and configure the command registry
   val commandRegistry = CommandRegistry()
-  commandRegistry.register(PingCommand())
-  commandRegistry.register(HelloCommand())
+
+  // Automatically discover and register all commands in the commands package
+  commandRegistry.registerAllCommandsInPackage()
 
   // Register all commands with Kord
   commandRegistry.registerAllCommands(kord, mention)

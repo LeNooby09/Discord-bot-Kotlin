@@ -11,6 +11,7 @@ import java.time.Duration
  */
 class PingCommand : Command {
   override val name = "ping"
+  override val description = "Responds with detailed ping information including bot uptime and response times"
 
   companion object {
     private val startTime = Instant.now()

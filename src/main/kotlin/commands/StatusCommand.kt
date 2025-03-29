@@ -16,6 +16,7 @@ import kotlin.time.Duration.Companion.seconds
  */
 class StatusCommand : Command {
   override val name = "status"
+  override val description = "Monitors server status with subcommands: check, add, delete, list, help"
 
   // Store servers and their last known status
   private val servers = ConcurrentHashMap<String, Boolean>()

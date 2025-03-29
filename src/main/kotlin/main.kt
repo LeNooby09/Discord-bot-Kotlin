@@ -33,6 +33,11 @@ suspend fun main() {
   logger.info("Discovering and registering commands")
   commandRegistry.registerAllCommandsInPackage()
 
+  // Register the help command manually since it needs a reference to the command registry
+  logger.info("Registering help command")
+  val helpCommand = commands.HelpCommand(commandRegistry)
+  commandRegistry.register(helpCommand)
+
   // Register all commands with Kord
   logger.info("Registering command handlers with Kord")
   commandRegistry.registerAllCommands(kord, mention)

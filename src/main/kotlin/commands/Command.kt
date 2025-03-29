@@ -15,6 +15,13 @@ interface Command {
   val name: String
 
   /**
+   * A brief description of what the command does.
+   * This will be displayed in the help command.
+   */
+  val description: String
+    get() = "No description provided"
+
+  /**
    * Logger for this command.
    * Each command implementation will have its own logger instance.
    */

@@ -7,6 +7,7 @@ import dev.kord.core.event.message.MessageCreateEvent
  */
 class HelloCommand : Command {
   override val name = "hello"
+  override val description = "Responds with a friendly greeting"
 
   override suspend fun execute(event: MessageCreateEvent): Boolean {
     event.message.channel.createMessage("hello!")

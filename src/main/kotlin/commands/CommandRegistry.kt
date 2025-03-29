@@ -17,6 +17,13 @@ class CommandRegistry {
   private val commands = mutableMapOf<String, Command>()
 
   /**
+   * Returns a read-only view of the commands map.
+   * This allows other components to access the list of commands without modifying it.
+   */
+  val allCommands: Map<String, Command>
+    get() = commands.toMap()
+
+  /**
    * Registers a command with the registry.
    *
    * @param command The command to register

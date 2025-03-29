@@ -153,6 +153,13 @@ class CommandRegistry {
       return false
     }
 
+    // Skip HelpCommand as it requires a CommandRegistry in its constructor
+    // and will be registered manually
+    if (clazz.name == "commands.HelpCommand") {
+      logger.debug("Skipping HelpCommand for automatic registration")
+      return false
+    }
+
     // Check if the class implements the Command interface
     return Command::class.java.isAssignableFrom(clazz)
   }

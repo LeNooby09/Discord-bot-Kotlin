@@ -36,14 +36,19 @@ class StatusCommand : Command {
     val mention = "<@1327594330130481272>"
     val messageText = content.removePrefix(mention).trim().removePrefix(name).trim()
 
+    val username = event.message.author?.username ?: "Unknown"
+    logger.info("Executing status command for user: $username")
+
     // Set the notification channel to the current channel if not already set
     if (notificationChannel == null) {
+      logger.debug("Setting notification channel")
       notificationChannel = event.message.channel
     }
 
     // Parse the subcommand and arguments
     val parts = messageText.split(" ")
     val subcommand = if (parts.isNotEmpty()) parts[0].lowercase() else "help"
+    logger.info("Status subcommand: $subcommand, args: ${parts.drop(1)}")
 
     when (subcommand) {
       "check" -> handleCheckCommand(event, parts.drop(1))
@@ -53,53 +58,64 @@ class StatusCommand : Command {
       else -> handleHelpCommand(event)
     }
 
+    logger.debug("Status command execution completed")
     return true
   }
 
   private suspend fun handleCheckCommand(event: MessageCreateEvent, args: List<String>) {
+    logger.debug("Handling check command")
+
     if (args.isEmpty()) {
+      logger.info("Check command called without server argument")
       event.message.channel.createMessage("Please specify a server to check. Usage: status check <server>")
       return
     }
 
     val server = args[0]
+    logger.info("Checking status of server: $server")
 
     // Check if the server is in the IP blacklist
     if (isIpBlacklisted(server)) {
+      logger.warn("Attempted to check blacklisted IP: $server")
       event.message.channel.createMessage("⛔ This IP address is blacklisted and cannot be checked.")
       return
     }
 
     // Send initial message indicating check is in progress
+    logger.debug("Sending initial status message")
     event.message.channel.createMessage("⏳ Checking server $server status...")
 
     // Store the channel for later use
     val channel = event.message.channel
 
     // Launch a coroutine to perform the check in the background
+    logger.debug("Launching background check for server: $server")
     CoroutineScope(Dispatchers.Default).launch {
       try {
         // Perform the server check
+        logger.debug("Performing status check for server: $server")
         val isOnline = checkServerStatus(server)
 
         // Create the status message
         val statusMessage = if (isOnline) {
+          logger.info("Server $server is online")
           "✅ Server $server is online"
         } else {
+          logger.info("Server $server is offline")
           "❌ Server $server is offline"
         }
 
         // Send the result as a new message
+        logger.debug("Sending status result message")
         withContext(Dispatchers.IO) {
           channel.createMessage(statusMessage)
         }
       } catch (e: Exception) {
         // Handle any errors
+        logger.error("Error checking server status for $server", e)
         withContext(Dispatchers.IO) {
           channel.createMessage("❌ Error checking server $server: ${e.message}")
         }
-        println("Error checking server status: ${e.message}")
-        e.printStackTrace()
       }
     }
   }
@@ -158,11 +174,10 @@ class StatusCommand : Command {
           }
         } catch (e: Exception) {
           // Handle any errors
+          logger.error("Error adding server $server to monitoring list", e)
           withContext(Dispatchers.IO) {
             channel.createMessage("❌ Error adding server $server: ${e.message}")
           }
-          println("Error adding server: ${e.message}")
-          e.printStackTrace()
         }
       }
     } catch (e: Exception) {
@@ -215,22 +230,32 @@ class StatusCommand : Command {
   }
 
   private fun startMonitoring() {
+    logger.info("Starting server monitoring job")
     monitorJob = CoroutineScope(Dispatchers.Default).launch {
       while (isActive) {
         checkAllServers()
+        logger.debug("Server monitoring cycle completed, waiting for next cycle")
         delay(30.seconds)
       }
     }
+    logger.info("Server monitoring job started")
   }
 
   private suspend fun checkAllServers() {
+    val serverCount = servers.size
+    if (serverCount > 0) {
+      logger.debug("Checking status of $serverCount servers")
+    }
+
     val serversCopy = HashMap(servers)
 
     for ((server, previousStatus) in serversCopy) {
+      logger.debug("Checking server: $server (previous status: ${if (previousStatus) "online" else "offline"})")
       val currentStatus = checkServerStatus(server)
 
       // If status changed, update and notify
       if (currentStatus != previousStatus) {
+        logger.info("Server $server status changed from ${if (previousStatus) "online" else "offline"} to ${if (currentStatus) "online" else "offline"}")
         servers[server] = currentStatus
         notifyStatusChange(server, currentStatus)
       }
@@ -238,7 +263,11 @@ class StatusCommand : Command {
   }
 
   private suspend fun notifyStatusChange(server: String, isOnline: Boolean) {
-    val channel = notificationChannel ?: return
+    val channel = notificationChannel
+    if (channel == null) {
+      logger.warn("Cannot notify status change: notification channel not set")
+      return
+    }
 
     val statusMessage = if (isOnline) {
       "🔔 Server $server is now online ✅"
@@ -246,35 +275,47 @@ class StatusCommand : Command {
       "🔔 Server $server is now offline ❌"
     }
 
+    logger.info("Sending status change notification for server $server: ${if (isOnline) "online" else "offline"}")
     try {
       channel.createMessage(statusMessage)
+      logger.debug("Status change notification sent successfully")
     } catch (e: Exception) {
-      println("Failed to send status change notification: ${e.message}")
+      logger.error("Failed to send status change notification for server $server", e)
     }
   }
 
   private fun checkServerStatus(server: String): Boolean {
     val normalizedServer = normalizeServerAddress(server)
+    logger.debug("Checking status for server: $normalizedServer")
 
     // First try HTTP/HTTPS connection for web domains
     if (isLikelyWebDomain(server)) {
+      logger.debug("Server $server appears to be a web domain, trying HTTP check")
       try {
-        return checkWebDomainStatus(server)
+        val result = checkWebDomainStatus(server)
+        logger.debug("HTTP check for $server completed with result: ${if (result) "online" else "offline"}")
+        return result
       } catch (e: Exception) {
-        println("HTTP check failed for $server: ${e.message}, falling back to ping")
+        logger.warn("HTTP check failed for $server: ${e.message}, falling back to ping", e)
         // Fall back to ping if HTTP check fails
       }
     }
 
     // Try to ping the server as fallback or for non-web domains
+    logger.debug("Trying ping check for server: $normalizedServer")
     return try {
       val address = InetAddress.getByName(normalizedServer)
-      address.isReachable(5000) // 5 second timeout
+      val result = address.isReachable(5000) // 5 second timeout
+      logger.debug("Ping check for $normalizedServer completed with result: ${if (result) "reachable" else "unreachable"}")
+      result
     } catch (e: IOException) {
+      logger.debug("Ping check for $normalizedServer failed with IOException: ${e.message}")
       false
     } catch (e: UnknownHostException) {
+      logger.debug("Ping check for $normalizedServer failed with UnknownHostException: ${e.message}")
       false
     } catch (e: Exception) {
+      logger.warn("Ping check for $normalizedServer failed with unexpected exception", e)
       false
     }
   }
@@ -295,15 +336,18 @@ class StatusCommand : Command {
    * Checks if a web domain is available by making an HTTP request
    */
   private fun checkWebDomainStatus(server: String): Boolean {
+    logger.debug("Checking web domain status for: $server")
     try {
       // Ensure server has a protocol
       val urlStr = if (!server.contains("://")) {
         // Try HTTPS first, most modern sites use it
+        logger.debug("No protocol specified, trying HTTPS for $server")
         "https://$server"
       } else {
         server
       }
 
+      logger.debug("Making HTTP request to: $urlStr")
       val url = URL(urlStr)
       val connection = url.openConnection() as HttpURLConnection
       connection.connectTimeout = 5000 // 5 second timeout
@@ -313,14 +357,21 @@ class StatusCommand : Command {
 
       val responseCode = connection.responseCode
       connection.disconnect()
+      logger.debug("Received response code $responseCode from $urlStr")
 
       // Consider 2xx and 3xx response codes as "online"
-      return responseCode in 200..399
+      val isOnline = responseCode in 200..399
+      logger.debug("Web domain $server is ${if (isOnline) "online" else "offline"} (response code: $responseCode)")
+      return isOnline
     } catch (e: Exception) {
+      logger.debug("HTTPS request failed for $server: ${e.message}")
+
       // If HTTPS fails, try HTTP as fallback
       if (server.contains("https://")) {
+        logger.debug("Trying HTTP fallback for $server")
         try {
           val httpUrl = URL(server.replace("https://", "http://"))
+          logger.debug("Making HTTP request to: $httpUrl")
           val connection = httpUrl.openConnection() as HttpURLConnection
           connection.connectTimeout = 5000
           connection.readTimeout = 5000
@@ -329,12 +380,17 @@ class StatusCommand : Command {
 
           val responseCode = connection.responseCode
           connection.disconnect()
+          logger.debug("Received response code $responseCode from HTTP fallback")
 
-          return responseCode in 200..399
+          val isOnline = responseCode in 200..399
+          logger.debug("Web domain $server HTTP fallback is ${if (isOnline) "online" else "offline"} (response code: $responseCode)")
+          return isOnline
         } catch (e: Exception) {
+          logger.debug("HTTP fallback request also failed for $server: ${e.message}")
           return false
         }
       }
+      logger.debug("Web domain check failed for $server")
       return false
     }
   }
@@ -408,7 +464,7 @@ class StatusCommand : Command {
       server
     } catch (e: Exception) {
       // If all parsing fails, return original input
-      println("Error normalizing server address: ${e.message}")
+      logger.warn("Error normalizing server address: ${e.message}", e)
       server
     }
   }

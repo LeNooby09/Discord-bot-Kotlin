@@ -1,6 +1,8 @@
 package commands
 
 import dev.kord.core.event.message.MessageCreateEvent
+import org.slf4j.Logger
+import utils.logger
 
 /**
  * Interface for all bot commands.
@@ -11,6 +13,13 @@ interface Command {
    * The name of the command that users will type after the mention.
    */
   val name: String
+
+  /**
+   * Logger for this command.
+   * Each command implementation will have its own logger instance.
+   */
+  val logger: Logger
+    get() = logger()
 
   /**
    * Executes the command logic.

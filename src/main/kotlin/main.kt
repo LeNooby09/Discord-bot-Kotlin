@@ -4,6 +4,7 @@ import dev.kord.gateway.Intent
 import java.io.File
 import java.io.IOException
 import commands.CommandRegistry
+import database.DatabaseManager
 import org.slf4j.LoggerFactory
 
 // Get logger for the main class
@@ -19,6 +20,17 @@ private val token: String = try {
 
 suspend fun main() {
   logger.info("Starting Discord bot")
+
+  // Initialize the database
+  logger.info("Initializing database")
+  val dbManager = DatabaseManager.getInstance()
+  dbManager.initialize()
+
+  // Add shutdown hook to close database connection
+  Runtime.getRuntime().addShutdownHook(Thread {
+    logger.info("Shutting down, closing database connection")
+    dbManager.close()
+  })
 
   logger.debug("Initializing Kord with token")
   val kord = Kord(token)

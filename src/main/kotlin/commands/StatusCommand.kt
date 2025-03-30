@@ -1,8 +1,9 @@
 package commands
 
+import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
 import kotlinx.coroutines.*
-import java.io.IOException
+import java.io.*
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URL
@@ -13,13 +14,18 @@ import kotlin.time.Duration.Companion.seconds
 /**
  * Command that allows users to monitor server status.
  * Supports checking if servers are online, adding/removing servers, and notifications on status changes.
+ * Stores server data on a per-user basis and persists it to disk.
  */
 class StatusCommand : Command {
   override val name = "status"
   override val description = "Monitors server status with subcommands: check, add, delete, list, help"
 
-  // Store servers and their last known status
-  private val servers = ConcurrentHashMap<String, Boolean>()
+  // Store servers and their last known status per user
+  // Map<UserId, Map<ServerAddress, IsOnline>>
+  private val userServers = ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>()
+
+  // Database manager for storing and retrieving data
+  private val dbManager = DatabaseManager.getInstance()
 
   // Background job for monitoring servers
   private var monitorJob: Job? = null
@@ -28,8 +34,61 @@ class StatusCommand : Command {
   private var notificationChannel: dev.kord.core.behavior.channel.MessageChannelBehavior? = null
 
   init {
+    // Load saved data
+    loadData()
+
     // Start the background monitoring job
     startMonitoring()
+  }
+
+  /**
+   * Loads user server data from the database
+   */
+  private fun loadData() {
+    try {
+      logger.info("Loading user server data from database")
+
+      // Load all server status data from the database
+      val loadedData = dbManager.loadAllServerStatus()
+
+      // Update the in-memory map with the loaded data
+      userServers.clear()
+      userServers.putAll(loadedData)
+
+      logger.info("Loaded data for ${userServers.size} users from database")
+    } catch (e: Exception) {
+      logger.error("Error loading user server data from database", e)
+    }
+  }
+
+  /**
+   * Saves user server data to the database
+   */
+  private fun saveData() {
+    try {
+      logger.info("Saving user server data to database")
+
+      // Save each user's server data to the database
+      for ((userId, serverMap) in userServers) {
+        dbManager.saveServerStatus(userId, serverMap)
+      }
+
+      logger.info("User server data saved successfully to database")
+    } catch (e: Exception) {
+      logger.error("Error saving user server data to database", e)
+    }
+  }
+
+
+  /**
+   * Gets the server map for a user, loading it from the database if it doesn't exist in memory
+   */
+  private fun getServerMapForUser(userId: String): ConcurrentHashMap<String, Boolean> {
+    return userServers.computeIfAbsent(userId) { 
+      // If not in memory, try to load from database
+      logger.debug("Loading server map for user $userId from database")
+      dbManager.loadServerStatus(userId)
+    }
   }
 
   override suspend fun execute(event: MessageCreateEvent): Boolean {
@@ -38,7 +97,8 @@ class StatusCommand : Command {
     val messageText = content.removePrefix(mention).trim().removePrefix(name).trim()
 
     val username = event.message.author?.username ?: "Unknown"
-    logger.info("Executing status command for user: $username")
+    val userId = event.message.author?.id?.toString() ?: "unknown"
+    logger.info("Executing status command for user: $username (ID: $userId)")
 
     // Set the notification channel to the current channel if not already set
     if (notificationChannel == null) {
@@ -128,6 +188,7 @@ class StatusCommand : Command {
     }
 
     val server = args[0]
+    val userId = event.message.author?.id?.toString() ?: "unknown"
 
     // Check if the server is in the IP blacklist
     if (isIpBlacklisted(server)) {
@@ -139,7 +200,9 @@ class StatusCommand : Command {
     try {
       // Try to resolve the hostname or IP
       val isValid = try {
-        InetAddress.getByName(server)
+        withContext(Dispatchers.IO) {
+          InetAddress.getByName(server)
+        }
         true
       } catch (e: UnknownHostException) {
         // If it's not a valid hostname/IP, check if it's a URL
@@ -167,7 +230,11 @@ class StatusCommand : Command {
         try {
           // Add the server to the monitoring list
           val status = checkServerStatus(server)
-          servers[server] = status
+          val userServersMap = getServerMapForUser(userId)
+          userServersMap[server] = status
+
+          // Save the updated data
+          saveData()
 
           // Send the result as a new message
           withContext(Dispatchers.IO) {
@@ -193,25 +260,32 @@ class StatusCommand : Command {
     }
 
     val server = args[0]
+    val userId = event.message.author?.id?.toString() ?: "unknown"
+    val userServersMap = getServerMapForUser(userId)
 
-    if (servers.remove(server) != null) {
-      event.message.channel.createMessage("Removed server $server from monitoring list")
+    if (userServersMap.remove(server) != null) {
+      // Save the updated data
+      saveData()
+      event.message.channel.createMessage("Removed server $server from your monitoring list")
     } else {
-      event.message.channel.createMessage("Server $server is not in the monitoring list")
+      event.message.channel.createMessage("Server $server is not in your monitoring list")
     }
   }
 
   private suspend fun handleListCommand(event: MessageCreateEvent) {
-    if (servers.isEmpty()) {
-      event.message.channel.createMessage("No servers are currently being monitored")
+    val userId = event.message.author?.id?.toString() ?: "unknown"
+    val userServersMap = getServerMapForUser(userId)
+
+    if (userServersMap.isEmpty()) {
+      event.message.channel.createMessage("You don't have any servers in your monitoring list")
       return
     }
 
-    val serverList = servers.entries.joinToString("\n") { (server, status) ->
+    val serverList = userServersMap.entries.joinToString("\n") { (server, status) ->
       "$server: ${if (status) "online ✅" else "offline ❌"}"
     }
 
-    event.message.channel.createMessage("Monitored servers:\n$serverList")
+    event.message.channel.createMessage("Your monitored servers:\n$serverList")
   }
 
   private suspend fun handleHelpCommand(event: MessageCreateEvent) {
@@ -220,10 +294,11 @@ class StatusCommand : Command {
             Monitor server status with the following subcommands:
 
             `status check <server>` - Check if a server is online
-            `status add <server>` - Add a server to the monitoring list
-            `status delete <server>` - Remove a server from the monitoring list
-            `status list` - List all monitored servers and their status
+            `status add <server>` - Add a server to your personal monitoring list
+            `status delete <server>` - Remove a server from your personal monitoring list
+            `status list` - List all servers in your personal monitoring list and their status
 
+            Your server list is stored in a database and persists between bot restarts.
             The bot will automatically notify you when a server's status changes.
         """.trimIndent()
 
@@ -243,22 +318,39 @@ class StatusCommand : Command {
   }
 
   private suspend fun checkAllServers() {
-    val serverCount = servers.size
-    if (serverCount > 0) {
-      logger.debug("Checking status of $serverCount servers")
+    var totalServerCount = 0
+    userServers.values.forEach { serverMap -> totalServerCount += serverMap.size }
+
+    if (totalServerCount > 0) {
+      logger.debug("Checking status of $totalServerCount servers across ${userServers.size} users")
     }
 
-    val serversCopy = HashMap(servers)
+    // Make a copy of the user servers map to avoid concurrent modification
+    val userServersCopy = HashMap<String, HashMap<String, Boolean>>()
+    for ((userId, serverMap) in userServers) {
+      userServersCopy[userId] = HashMap(serverMap)
+    }
 
-    for ((server, previousStatus) in serversCopy) {
-      logger.debug("Checking server: $server (previous status: ${if (previousStatus) "online" else "offline"})")
-      val currentStatus = checkServerStatus(server)
+    // Check each server for each user
+    for ((userId, serverMap) in userServersCopy) {
+      for ((server, previousStatus) in serverMap) {
+        logger.debug("Checking server: $server for user $userId (previous status: ${if (previousStatus) "online" else "offline"})")
+        val currentStatus = checkServerStatus(server)
 
-      // If status changed, update and notify
-      if (currentStatus != previousStatus) {
-        logger.info("Server $server status changed from ${if (previousStatus) "online" else "offline"} to ${if (currentStatus) "online" else "offline"}")
-        servers[server] = currentStatus
-        notifyStatusChange(server, currentStatus)
+        // If status changed, update and notify
+        if (currentStatus != previousStatus) {
+          logger.info("Server $server status changed from ${if (previousStatus) "online" else "offline"} to ${if (currentStatus) "online" else "offline"}")
+
+          // Update the status in the original map
+          val userServersMap = getServerMapForUser(userId)
+          userServersMap[server] = currentStatus
+
+          // Save the updated data
+          saveData()
+
+          // Notify about the status change
+          notifyStatusChange(server, currentStatus)
+        }
       }
     }
   }

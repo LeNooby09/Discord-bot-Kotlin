@@ -1,11 +1,11 @@
-import dev.kord.core.Kord
-import dev.kord.gateway.PrivilegedIntent
-import dev.kord.gateway.Intent
-import java.io.File
-import java.io.IOException
 import commands.CommandRegistry
 import database.DatabaseManager
+import dev.kord.core.Kord
+import dev.kord.gateway.Intent
+import dev.kord.gateway.PrivilegedIntent
 import org.slf4j.LoggerFactory
+import java.io.File
+import java.io.IOException
 
 // Get logger for the main class
 private val logger = LoggerFactory.getLogger("MainKt")
@@ -31,6 +31,24 @@ suspend fun main() {
     logger.info("Shutting down, closing database connection")
     dbManager.close()
   })
+
+  // Generate one-time admin verification code if no admins exist
+  val admins = dbManager.getAllAdmins()
+  if (admins.isEmpty()) {
+    val adminCode = dbManager.createVerificationCode("admin")
+    if (adminCode != null) {
+      println("\n===========================================================")
+      println("ADMIN VERIFICATION CODE: $adminCode")
+      println("Use this code with the 'admin verify' command to become admin")
+      println("This code can only be used once and will expire after restart")
+      println("===========================================================\n")
+      logger.info("Generated one-time admin verification code")
+    } else {
+      logger.error("Failed to generate admin verification code")
+    }
+  } else {
+    logger.info("Admin users already exist, skipping verification code generation")
+  }
 
   logger.debug("Initializing Kord with token")
   val kord = Kord(token)

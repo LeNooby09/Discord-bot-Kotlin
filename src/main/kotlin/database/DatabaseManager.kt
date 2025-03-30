@@ -69,6 +69,31 @@ class DatabaseManager private constructor() {
         """
     )
 
+    // Create the admin_users table
+    statement?.execute(
+      """
+            CREATE TABLE IF NOT EXISTS admin_users (
+                user_id TEXT PRIMARY KEY,
+                username TEXT NOT NULL,
+                added_at INTEGER NOT NULL
+            )
+        """
+    )
+
+    // Create the verification_codes table
+    statement?.execute(
+      """
+            CREATE TABLE IF NOT EXISTS verification_codes (
+                code TEXT PRIMARY KEY,
+                type TEXT NOT NULL,
+                created_at INTEGER NOT NULL,
+                used INTEGER DEFAULT 0,
+                used_by TEXT DEFAULT NULL,
+                created_by TEXT DEFAULT NULL
+            )
+        """
+    )
+
     statement?.close()
     logger.debug("Tables created successfully")
   }
@@ -198,6 +223,244 @@ class DatabaseManager private constructor() {
     } catch (e: SQLException) {
       logger.error("Error closing database connection", e)
     }
+  }
+
+  /**
+   * Adds a user as an admin.
+   * @param userId The Discord user ID
+   * @param username The Discord username
+   * @return True if the user was added successfully, false otherwise
+   */
+  fun addAdminUser(userId: String, username: String): Boolean {
+    try {
+      logger.debug("Adding admin user $username ($userId)")
+      connection?.let { conn ->
+        val statement = conn.prepareStatement(
+          "INSERT OR REPLACE INTO admin_users (user_id, username, added_at) VALUES (?, ?, ?)"
+        )
+        statement.setString(1, userId)
+        statement.setString(2, username)
+        statement.setLong(3, System.currentTimeMillis())
+
+        val result = statement.executeUpdate() > 0
+        statement.close()
+
+        logger.info("Admin user $username ($userId) added successfully")
+        return result
+      } ?: run {
+        logger.error("Database connection is null, cannot add admin user")
+        return false
+      }
+    } catch (e: SQLException) {
+      logger.error("Error adding admin user", e)
+      return false
+    }
+  }
+
+  /**
+   * Checks if a user is an admin.
+   * @param userId The Discord user ID
+   * @return True if the user is an admin, false otherwise
+   */
+  fun isAdmin(userId: String): Boolean {
+    try {
+      logger.debug("Checking if user $userId is an admin")
+      connection?.let { conn ->
+        val statement = conn.prepareStatement("SELECT 1 FROM admin_users WHERE user_id = ?")
+        statement.setString(1, userId)
+        val resultSet = statement.executeQuery()
+
+        val isAdmin = resultSet.next()
+        resultSet.close()
+        statement.close()
+
+        return isAdmin
+      } ?: run {
+        logger.error("Database connection is null, cannot check admin status")
+        return false
+      }
+    } catch (e: SQLException) {
+      logger.error("Error checking admin status", e)
+      return false
+    }
+  }
+
+  /**
+   * Gets all admin users.
+   * @return A list of pairs containing user IDs and usernames
+   */
+  fun getAllAdmins(): List<Pair<String, String>> {
+    val admins = mutableListOf<Pair<String, String>>()
+
+    try {
+      logger.debug("Getting all admin users")
+      connection?.let { conn ->
+        val statement = conn.createStatement()
+        val resultSet = statement.executeQuery("SELECT user_id, username FROM admin_users")
+
+        while (resultSet.next()) {
+          val userId = resultSet.getString("user_id")
+          val username = resultSet.getString("username")
+          admins.add(Pair(userId, username))
+        }
+
+        resultSet.close()
+        statement.close()
+        logger.debug("Found ${admins.size} admin users")
+      } ?: run {
+        logger.error("Database connection is null, cannot get admin users")
+      }
+    } catch (e: SQLException) {
+      logger.error("Error getting admin users", e)
+    }
+
+    return admins
+  }
+
+  /**
+   * Removes a user from admin status.
+   * @param userId The Discord user ID to remove from admins
+   * @return True if the user was removed successfully, false otherwise
+   */
+  fun removeAdminUser(userId: String): Boolean {
+    try {
+      logger.debug("Removing admin user with ID $userId")
+      connection?.let { conn ->
+        val statement = conn.prepareStatement("DELETE FROM admin_users WHERE user_id = ?")
+        statement.setString(1, userId)
+
+        val result = statement.executeUpdate() > 0
+        statement.close()
+
+        if (result) {
+          logger.info("Admin user with ID $userId removed successfully")
+        } else {
+          logger.warn("No admin user found with ID $userId to remove")
+        }
+
+        return result
+      } ?: run {
+        logger.error("Database connection is null, cannot remove admin user")
+        return false
+      }
+    } catch (e: SQLException) {
+      logger.error("Error removing admin user", e)
+      return false
+    }
+  }
+
+  /**
+   * Creates a verification code.
+   * @param type The type of code (e.g., "admin", "user")
+   * @param createdBy The user ID of the admin who created the code (null for system-generated codes)
+   * @return The generated code, or null if an error occurred
+   */
+  fun createVerificationCode(type: String, createdBy: String? = null): String? {
+    try {
+      logger.debug("Creating verification code of type $type")
+      val code = generateRandomCode()
+
+      connection?.let { conn ->
+        val statement = conn.prepareStatement(
+          "INSERT INTO verification_codes (code, type, created_at, created_by) VALUES (?, ?, ?, ?)"
+        )
+        statement.setString(1, code)
+        statement.setString(2, type)
+        statement.setLong(3, System.currentTimeMillis())
+        if (createdBy != null) {
+          statement.setString(4, createdBy)
+        } else {
+          statement.setNull(4, java.sql.Types.VARCHAR)
+        }
+
+        val result = statement.executeUpdate() > 0
+        statement.close()
+
+        if (result) {
+          logger.info("Verification code created: $code (type: $type)")
+          return code
+        } else {
+          logger.error("Failed to create verification code")
+          return null
+        }
+      } ?: run {
+        logger.error("Database connection is null, cannot create verification code")
+        return null
+      }
+    } catch (e: SQLException) {
+      logger.error("Error creating verification code", e)
+      return null
+    }
+  }
+
+  /**
+   * Validates and uses a verification code.
+   * @param code The code to validate
+   * @param userId The user ID who is using the code
+   * @return The type of the code if valid, null otherwise
+   */
+  fun validateAndUseCode(code: String, userId: String): String? {
+    try {
+      logger.debug("Validating verification code: $code for user $userId")
+      connection?.let { conn ->
+        conn.autoCommit = false
+
+        // Check if the code exists and is unused
+        val checkStatement = conn.prepareStatement(
+          "SELECT type FROM verification_codes WHERE code = ? AND used = 0"
+        )
+        checkStatement.setString(1, code)
+        val resultSet = checkStatement.executeQuery()
+
+        if (!resultSet.next()) {
+          // Code doesn't exist or is already used
+          resultSet.close()
+          checkStatement.close()
+          conn.rollback()
+          conn.autoCommit = true
+          logger.debug("Invalid or already used verification code: $code")
+          return null
+        }
+
+        val codeType = resultSet.getString("type")
+        resultSet.close()
+        checkStatement.close()
+
+        // Mark the code as used
+        val updateStatement = conn.prepareStatement(
+          "UPDATE verification_codes SET used = 1, used_by = ? WHERE code = ?"
+        )
+        updateStatement.setString(1, userId)
+        updateStatement.setString(2, code)
+        updateStatement.executeUpdate()
+        updateStatement.close()
+
+        conn.commit()
+        conn.autoCommit = true
+
+        logger.info("Verification code $code successfully used by $userId (type: $codeType)")
+        return codeType
+      } ?: run {
+        logger.error("Database connection is null, cannot validate verification code")
+        return null
+      }
+    } catch (e: SQLException) {
+      logger.error("Error validating verification code", e)
+      connection?.rollback()
+      connection?.autoCommit = true
+      return null
+    }
+  }
+
+  /**
+   * Generates a random verification code.
+   * @return A random 8-character alphanumeric code
+   */
+  private fun generateRandomCode(): String {
+    val charPool = ('A'..'Z') + ('0'..'9')
+    return (1..8)
+      .map { charPool.random() }
+      .joinToString("")
   }
 
   companion object {

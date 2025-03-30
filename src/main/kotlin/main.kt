@@ -12,53 +12,53 @@ import java.io.IOException
 private val logger = LoggerFactory.getLogger("MainKt")
 
 private val token: String = try {
-  logger.info("Reading bot token from .token file")
-  File("./.token").readText().trim()
+	logger.info("Reading bot token from .token file")
+	File("./.token").readText().trim()
 } catch (e: IOException) {
-  logger.error("Failed to read token file", e)
-  throw RuntimeException("Failed to read token file", e)
+	logger.error("Failed to read token file", e)
+	throw RuntimeException("Failed to read token file", e)
 }
 
 suspend fun main() {
-  logger.info("Starting Discord bot")
+	logger.info("Starting Discord bot")
 
-  // Initialize the database
-  val dbManager = DatabaseManager.getInstance()
-  dbManager.initialize()
-  logger.info("Database initialized")
+	// Initialize the database
+	val dbManager = DatabaseManager.getInstance()
+	dbManager.initialize()
+	logger.info("Database initialized")
 
-  // Add shutdown hook to close database connection
-  Runtime.getRuntime().addShutdownHook(Thread {
-    logger.info("Shutting down, closing database connection")
-    dbManager.close()
-  })
+	// Add shutdown hook to close database connection
+	Runtime.getRuntime().addShutdownHook(Thread {
+		logger.info("Shutting down, closing database connection")
+		dbManager.close()
+	})
 
-  // Generate one-time admin verification code if no admins exist
-  AdminCommand.generateOneTimeAdminCode(dbManager)
+	// Generate one-time admin verification code if no admins exist
+	AdminCommand.generateOneTimeAdminCode(dbManager)
 
-  // Initialize Kord and set up commands
-  val kord = Kord(token)
-  val mention = "<@1327594330130481272>"
-  logger.info("Initializing bot with mention ID: $mention")
+	// Initialize Kord and set up commands
+	val kord = Kord(token)
+	val mention = "<@1327594330130481272>"
+	logger.info("Initializing bot with mention ID: $mention")
 
-  // Create command registry and register all commands
-  val commandRegistry = CommandRegistry()
-  commandRegistry.registerAllCommandsInPackage()
+	// Create command registry and register all commands
+	val commandRegistry = CommandRegistry()
+	commandRegistry.registerAllCommandsInPackage()
 
-  // Register the help command manually since it needs a reference to the command registry
-  val helpCommand = commands.HelpCommand(commandRegistry)
-  commandRegistry.register(helpCommand)
+	// Register the help command manually since it needs a reference to the command registry
+	val helpCommand = commands.HelpCommand(commandRegistry)
+	commandRegistry.register(helpCommand)
 
-  // Register all commands with Kord
-  commandRegistry.registerAllCommands(kord, mention)
-  logger.info("All commands registered successfully")
+	// Register all commands with Kord
+	commandRegistry.registerAllCommands(kord, mention)
+	logger.info("All commands registered successfully")
 
-  logger.info("Logging in to Discord")
-  kord.login {
-    @OptIn(PrivilegedIntent::class)
-    intents += Intent.MessageContent
-    logger.debug("Enabled MessageContent intent")
-  }
+	logger.info("Logging in to Discord")
+	kord.login {
+		@OptIn(PrivilegedIntent::class)
+		intents += Intent.MessageContent
+		logger.debug("Enabled MessageContent intent")
+	}
 
-  logger.info("Bot is now online and ready")
+	logger.info("Bot is now online and ready")
 }

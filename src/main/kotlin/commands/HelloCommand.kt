@@ -6,11 +6,11 @@ import dev.kord.core.event.message.MessageCreateEvent
  * Command that responds with "hello!" when a user types "hello".
  */
 class HelloCommand : Command {
-  override val name = "hello"
-  override val description = "Responds with a friendly greeting"
+	override val name = "hello"
+	override val description = "Responds with a friendly greeting"
 
-  override suspend fun execute(event: MessageCreateEvent): Boolean {
-    event.message.channel.createMessage("hello!")
-    return true
-  }
+	override suspend fun execute(event: MessageCreateEvent): Boolean {
+		event.message.channel.createMessage("hello!")
+		return true
+	}
 }

@@ -13,22 +13,22 @@ status monitoring capabilities.
 ## Available Commands
 
 - **help**: Lists all available commands or provides details about a specific command
-    - Usage: `@bot help` or `@bot help <command>`
+	- Usage: `@bot help` or `@bot help <command>`
 
 - **ping**: Responds with detailed ping information including bot uptime and response times
-    - Usage: `@bot ping`
+	- Usage: `@bot ping`
 
 - **echo**: Echoes back the text you provide after the command
-    - Usage: `@bot echo <message>`
+	- Usage: `@bot echo <message>`
 
 - **status**: Monitor the status of servers and receive notifications when they change
-    - Subcommands:
-        - `check <server>`: Check the status of a specific server
-        - `add <server>`: Add a server to your monitoring list
-        - `delete <server>`: Remove a server from your monitoring list
-        - `list`: List all servers you're monitoring
-        - `help`: Show help for the status command
-    - Usage: `@bot status <subcommand> [arguments]`
+	- Subcommands:
+		- `check <server>`: Check the status of a specific server
+		- `add <server>`: Add a server to your monitoring list
+		- `delete <server>`: Remove a server from your monitoring list
+		- `list`: List all servers you're monitoring
+		- `help`: Show help for the status command
+	- Usage: `@bot status <subcommand> [arguments]`
 
 ## Setup
 
@@ -87,9 +87,9 @@ the bot is first run.
 
 1. Create a new Kotlin class in the `commands` package that implements the `Command` interface
 2. Implement the required methods:
-    - `name`: The name of the command
-    - `description`: A brief description of what the command does
-    - `execute`: The logic to execute when the command is invoked
+	- `name`: The name of the command
+	- `description`: A brief description of what the command does
+	- `execute`: The logic to execute when the command is invoked
 3. The command will be automatically discovered and registered when the bot starts
 
 ## License

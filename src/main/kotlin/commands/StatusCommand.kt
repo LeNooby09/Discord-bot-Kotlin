@@ -3,7 +3,7 @@ package commands
 import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
 import kotlinx.coroutines.*
-import java.io.*
+import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URL
@@ -24,13 +24,17 @@ class StatusCommand : Command {
   // Map<UserId, Map<ServerAddress, IsOnline>>
   private val userServers = ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>()
 
+  // Store channel IDs for each user-server pair
+  // Map<UserId, Map<ServerAddress, ChannelId>>
+  private val userServerChannels = ConcurrentHashMap<String, ConcurrentHashMap<String, String>>()
+
   // Database manager for storing and retrieving data
   private val dbManager = DatabaseManager.getInstance()
 
   // Background job for monitoring servers
   private var monitorJob: Job? = null
 
-  // Channel to send notifications to
+  // Channel to send notifications to (for backward compatibility)
   private var notificationChannel: dev.kord.core.behavior.channel.MessageChannelBehavior? = null
 
   init {
@@ -138,13 +142,13 @@ class StatusCommand : Command {
     // Check if the server is in the IP blacklist
     if (isIpBlacklisted(server)) {
       logger.warn("Attempted to check blacklisted IP: $server")
-      event.message.channel.createMessage("⛔ This IP address is blacklisted and cannot be checked.")
+      event.message.channel.createMessage("This IP address is blacklisted and cannot be checked.")
       return
     }
 
     // Send initial message indicating check is in progress
     logger.debug("Sending initial status message")
-    event.message.channel.createMessage("⏳ Checking server $server status...")
+    event.message.channel.createMessage("Checking server $server status...")
 
     // Store the channel for later use
     val channel = event.message.channel
@@ -160,10 +164,10 @@ class StatusCommand : Command {
         // Create the status message
         val statusMessage = if (isOnline) {
           logger.info("Server $server is online")
-          "✅ Server $server is online"
+          "Server $server is online"
         } else {
           logger.info("Server $server is offline")
-          "❌ Server $server is offline"
+          "Server $server is offline"
         }
 
         // Send the result as a new message
@@ -175,7 +179,7 @@ class StatusCommand : Command {
         // Handle any errors
         logger.error("Error checking server status for $server", e)
         withContext(Dispatchers.IO) {
-          channel.createMessage("❌ Error checking server $server: ${e.message}")
+          channel.createMessage("Error checking server $server: ${e.message}")
         }
       }
     }
@@ -192,7 +196,7 @@ class StatusCommand : Command {
 
     // Check if the server is in the IP blacklist
     if (isIpBlacklisted(server)) {
-      event.message.channel.createMessage("⛔ This IP address is blacklisted and cannot be monitored.")
+      event.message.channel.createMessage("This IP address is blacklisted and cannot be monitored.")
       return
     }
 
@@ -220,7 +224,7 @@ class StatusCommand : Command {
       }
 
       // Send initial message indicating check is in progress
-      val message = event.message.channel.createMessage("⏳ Adding server $server to monitoring list. Checking status...")
+      val message = event.message.channel.createMessage("Adding server $server to monitoring list. Checking status...")
 
       // Store the channel for later use
       val channel = event.message.channel
@@ -233,18 +237,23 @@ class StatusCommand : Command {
           val userServersMap = getServerMapForUser(userId)
           userServersMap[server] = status
 
+          // Store the channel ID for this user-server pair
+          val channelId = channel.id.toString()
+          userServerChannels.computeIfAbsent(userId) { ConcurrentHashMap() }[server] = channelId
+          logger.debug("Stored channel ID $channelId for user $userId and server $server")
+
           // Save the updated data
           saveData()
 
           // Send the result as a new message
           withContext(Dispatchers.IO) {
-            channel.createMessage("Added server $server to monitoring list. Current status: ${if (status) "online ✅" else "offline ❌"}")
+            channel.createMessage("Added server $server to monitoring list. Current status: ${if (status) "online" else "offline "}")
           }
         } catch (e: Exception) {
           // Handle any errors
           logger.error("Error adding server $server to monitoring list", e)
           withContext(Dispatchers.IO) {
-            channel.createMessage("❌ Error adding server $server: ${e.message}")
+            channel.createMessage("Error adding server $server: ${e.message}")
           }
         }
       }
@@ -282,7 +291,7 @@ class StatusCommand : Command {
     }
 
     val serverList = userServersMap.entries.joinToString("\n") { (server, status) ->
-      "$server: ${if (status) "online ✅" else "offline ❌"}"
+      "$server: ${if (status) "online" else "offline"}"
     }
 
     event.message.channel.createMessage("Your monitored servers:\n$serverList")
@@ -349,26 +358,29 @@ class StatusCommand : Command {
           saveData()
 
           // Notify about the status change
-          notifyStatusChange(server, currentStatus)
+          notifyStatusChange(server, currentStatus, userId)
         }
       }
     }
   }
 
-  private suspend fun notifyStatusChange(server: String, isOnline: Boolean) {
+  private suspend fun notifyStatusChange(server: String, isOnline: Boolean, userId: String) {
+    // For now, we'll just use the global notification channel
+    // In the future, we could enhance this to use the specific channel where the server was added
     val channel = notificationChannel
+
     if (channel == null) {
       logger.warn("Cannot notify status change: notification channel not set")
       return
     }
 
     val statusMessage = if (isOnline) {
-      "🔔 Server $server is now online ✅"
+      "<@$userId> Server $server is now online"
     } else {
-      "🔔 Server $server is now offline ❌"
+      "<@$userId> Server $server is now offline"
     }
 
-    logger.info("Sending status change notification for server $server: ${if (isOnline) "online" else "offline"}")
+    logger.info("Sending status change notification for server $server: ${if (isOnline) "online" else "offline"} to user $userId")
     try {
       channel.createMessage(statusMessage)
       logger.debug("Status change notification sent successfully")

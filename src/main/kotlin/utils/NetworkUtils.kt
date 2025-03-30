@@ -1,10 +1,11 @@
 package utils
 
-import java.io.IOException
+import kotlinx.coroutines.*
 import java.net.HttpURLConnection
 import java.net.InetAddress
 import java.net.URL
-import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
+import kotlin.time.Duration.Companion.milliseconds
 
 /**
  * Utility class for network operations.
@@ -13,66 +14,62 @@ import java.net.UnknownHostException
 object NetworkUtils {
   private val logger = logger()
 
+  // Cache for DNS resolutions to avoid repeated lookups
+  private val dnsCache = ConcurrentHashMap<String, InetAddress>()
+
+  // Connection pool for HTTP connections
+  private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
+
+  // Shorter timeouts for faster checks
+  private const val CONNECTION_TIMEOUT = 3000
+  private const val READ_TIMEOUT = 3000
+  private const val PING_TIMEOUT = 3000
+
   /**
    * Checks the status of a server.
-   * First tries HTTP/HTTPS connection for web domains, then falls back to ping.
+   * Tries HTTP/HTTPS connection for web domains in parallel, then falls back to ping.
    *
    * @param server The server address to check
    * @return true if the server is online, false otherwise
    */
-  fun checkServerStatus(server: String): Boolean {
+  suspend fun checkServerStatus(server: String): Boolean {
     val normalizedServer = ServerUtils.normalizeServerAddress(server)
-    logger.debug("Checking status for server: $normalizedServer")
 
     // First try HTTP/HTTPS connection for web domains
     if (ServerUtils.isLikelyWebDomain(server)) {
-      logger.debug("Server $server appears to be a web domain, trying HTTP check")
       try {
-        val result = checkWebDomainStatus(server)
-        logger.debug("HTTP check for $server completed with result: ${if (result) "online" else "offline"}")
-        return result
+        return checkWebDomainStatus(server)
       } catch (e: Exception) {
-        logger.warn("HTTP check failed for $server: ${e.message}, falling back to ping", e)
         // Fall back to ping if HTTP check fails
       }
     }
 
     // Try to ping the server as fallback or for non-web domains
-    logger.debug("Trying ping check for server: $normalizedServer")
-    return try {
-      val address = InetAddress.getByName(normalizedServer)
-      val result = address.isReachable(5000) // 5 second timeout
-      logger.debug("Ping check for $normalizedServer completed with result: ${if (result) "reachable" else "unreachable"}")
-      result
-    } catch (e: IOException) {
-      logger.debug("Ping check for $normalizedServer failed with IOException: ${e.message}")
-      false
-    } catch (e: UnknownHostException) {
-      logger.debug("Ping check for $normalizedServer failed with UnknownHostException: ${e.message}")
-      false
-    } catch (e: Exception) {
-      logger.warn("Ping check for $normalizedServer failed with unexpected exception", e)
-      false
-    }
+    return pingServer(normalizedServer)
   }
 
   /**
-   * Checks if a web domain is available by making an HTTP request.
+   * Checks if a web domain is available by making HTTP and HTTPS requests in parallel.
    *
    * @param server The web domain to check
    * @return true if the domain is online, false otherwise
    */
-  private fun checkWebDomainStatus(server: String): Boolean {
-    logger.debug("Checking web domain status for: $server")
-
-    // Try HTTPS first
-    val isHttps = tryHttpRequest(server, true)
-    if (isHttps) {
-      return true
+  private suspend fun checkWebDomainStatus(server: String): Boolean = coroutineScope {
+    // Try both HTTP and HTTPS in parallel
+    val httpsDeferred = async {
+      withTimeoutOrNull(CONNECTION_TIMEOUT.toLong()) {
+        tryHttpRequest(server, true)
+      } ?: false
     }
 
-    // If HTTPS fails, try HTTP as fallback
-    return tryHttpRequest(server, false)
+    val httpDeferred = async {
+      withTimeoutOrNull(CONNECTION_TIMEOUT.toLong()) {
+        tryHttpRequest(server, false)
+      } ?: false
+    }
+
+    // Return true if either HTTP or HTTPS check succeeds
+    httpsDeferred.await() || httpDeferred.await()
   }
 
   /**
@@ -82,42 +79,56 @@ object NetworkUtils {
    * @param useHttps Whether to use HTTPS (true) or HTTP (false)
    * @return true if the request was successful, false otherwise
    */
-  private fun tryHttpRequest(server: String, useHttps: Boolean): Boolean {
+  private suspend fun tryHttpRequest(server: String, useHttps: Boolean): Boolean = withContext(Dispatchers.IO) {
     try {
       // Ensure server has a protocol
       val protocol = if (useHttps) "https://" else "http://"
-      val urlStr = if (!server.contains("://")) {
-        logger.debug("No protocol specified, trying ${if (useHttps) "HTTPS" else "HTTP"} for $server")
-        "$protocol$server"
-      } else {
-        if (useHttps && server.startsWith("http://")) {
-          server.replace("http://", "https://")
-        } else if (!useHttps && server.startsWith("https://")) {
-          server.replace("https://", "http://")
-        } else {
-          server
+      val urlStr = when {
+        !server.contains("://") -> "$protocol$server"
+        useHttps && server.startsWith("http://") -> server.replace("http://", "https://")
+        !useHttps && server.startsWith("https://") -> server.replace("https://", "http://")
+        else -> server
+      }
+
+      // Try to get connection from pool or create new one
+      val connection = connectionPool.getOrPut(urlStr) {
+        (URL(urlStr).openConnection() as HttpURLConnection).apply {
+          connectTimeout = CONNECTION_TIMEOUT
+          readTimeout = READ_TIMEOUT
+          requestMethod = "HEAD"
+          instanceFollowRedirects = true
+          useCaches = true
+          defaultUseCaches = true
         }
       }
 
-      logger.debug("Making ${if (useHttps) "HTTPS" else "HTTP"} request to: $urlStr")
-      val url = URL(urlStr)
-      val connection = url.openConnection() as HttpURLConnection
-      connection.connectTimeout = 5000 // 5 second timeout
-      connection.readTimeout = 5000
-      connection.requestMethod = "HEAD" // Don't need the body, just check if site responds
-      connection.instanceFollowRedirects = true
-
       val responseCode = connection.responseCode
-      connection.disconnect()
-      logger.debug("Received response code $responseCode from $urlStr")
 
       // Consider 2xx and 3xx response codes as "online"
-      val isOnline = responseCode in 200..399
-      logger.debug("Web domain $server is ${if (isOnline) "online" else "offline"} (response code: $responseCode)")
-      return isOnline
+      responseCode in 200..399
     } catch (e: Exception) {
-      logger.debug("${if (useHttps) "HTTPS" else "HTTP"} request failed for $server: ${e.message}")
-      return false
+      false
+    }
+  }
+
+  /**
+   * Pings a server to check if it's reachable.
+   *
+   * @param server The server address
+   * @return true if the server is reachable, false otherwise
+   */
+  private suspend fun pingServer(server: String): Boolean = withContext(Dispatchers.IO) {
+    try {
+      // Use cached DNS resolution if available
+      val address = dnsCache.getOrPut(server) {
+        InetAddress.getByName(server)
+      }
+
+      withTimeoutOrNull(PING_TIMEOUT.milliseconds) {
+        address.isReachable(PING_TIMEOUT)
+      } ?: false
+    } catch (e: Exception) {
+      false
     }
   }
 }

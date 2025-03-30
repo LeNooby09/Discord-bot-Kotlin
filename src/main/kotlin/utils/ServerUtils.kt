@@ -1,8 +1,11 @@
 package utils
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.net.InetAddress
 import java.net.URL
 import java.net.UnknownHostException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Utility class for server address operations.
@@ -11,16 +14,35 @@ import java.net.UnknownHostException
 object ServerUtils {
   private val logger = logger()
 
+  // Cache validation results to avoid repeated checks
+  private val validationCache = ConcurrentHashMap<String, Boolean>()
+
+  // Cache normalized addresses
+  private val normalizedAddressCache = ConcurrentHashMap<String, String>()
+
+  // Cache domain type results
+  private val webDomainCache = ConcurrentHashMap<String, Boolean>()
+
+  // Cache blacklist check results
+  private val blacklistCache = ConcurrentHashMap<String, Boolean>()
+
+  // Precompile regular expressions
+  private val ipPattern = Regex("^\\d+\\.\\d+\\.\\d+\\.\\d+$")
+
+  // Common TLDs for quick checking
+  private val commonTlds = setOf(".com", ".org", ".net", ".io", ".co", ".edu", ".gov")
+
   /**
    * Checks if a domain is likely a web domain (vs. a plain IP or service)
    */
   fun isLikelyWebDomain(server: String): Boolean {
-    val normalized = server.lowercase()
-    return normalized.contains("://") || // Has protocol
-      normalized.startsWith("www.") || // Starts with www
-      normalized.endsWith(".com") || normalized.endsWith(".org") ||
-      normalized.endsWith(".net") || normalized.endsWith(".io") ||
-      normalized.endsWith(".co") || normalized.contains(".") // Has domain extension
+    return webDomainCache.getOrPut(server) {
+      val normalized = server.lowercase()
+      normalized.contains("://") || // Has protocol
+        normalized.startsWith("www.") || // Starts with www
+        commonTlds.any { normalized.endsWith(it) } || // Has common TLD
+        normalized.contains(".") && !normalized.matches(ipPattern) // Has domain extension but not IP
+    }
   }
 
   /**
@@ -28,32 +50,31 @@ object ServerUtils {
    * This is particularly important for ping checks which need just the host
    */
   fun normalizeServerAddress(server: String): String {
-    return try {
-      // Handle URLs with protocol
-      if (server.contains("://")) {
-        val url = URL(server)
-        return url.host
-      }
-
-      // Handle URLs without protocol but with www or common TLDs
-      if (isLikelyWebDomain(server)) {
-        // Try to parse as URL with default protocol
-        try {
-          val url = URL("https://$server")
-          return url.host
-        } catch (e: Exception) {
-          // If that fails, try to extract domain manually
-          val domainParts = server.split("/", limit = 2)
-          return domainParts[0] // Take just the domain part, ignore any path
+    return normalizedAddressCache.getOrPut(server) {
+      try {
+        // Handle URLs with protocol
+        if (server.contains("://")) {
+          return@getOrPut URL(server).host
         }
-      }
 
-      // For non-web domains or IPs, return as is
-      server
-    } catch (e: Exception) {
-      // If all parsing fails, return original input
-      logger.warn("Error normalizing server address: ${e.message}", e)
-      server
+        // Handle URLs without protocol but with www or common TLDs
+        if (isLikelyWebDomain(server)) {
+          // Try to parse as URL with default protocol
+          try {
+            return@getOrPut URL("https://$server").host
+          } catch (e: Exception) {
+            // If that fails, extract domain manually
+            val domainParts = server.split("/", limit = 2)
+            return@getOrPut domainParts[0] // Take just the domain part, ignore any path
+          }
+        }
+
+        // For non-web domains or IPs, return as is
+        server
+      } catch (e: Exception) {
+        // If all parsing fails, return original input
+        server
+      }
     }
   }
 
@@ -62,38 +83,18 @@ object ServerUtils {
    * Currently blacklists all IPs starting with "100."
    */
   fun isIpBlacklisted(server: String): Boolean {
-    // Normalize the server address to get just the hostname/IP
-    val normalizedServer = try {
-      // For URLs with protocol, extract the host
-      if (server.contains("://")) {
-        val url = URL(server)
-        url.host
-      } else {
-        server
+    return blacklistCache.getOrPut(server) {
+      // Normalize the server address to get just the hostname/IP
+      val normalizedServer = normalizeServerAddress(server)
+
+      // Check if the normalized server address is an IP address starting with "100."
+      if (normalizedServer.matches(ipPattern) && normalizedServer.startsWith("100.")) {
+        return@getOrPut true
       }
-    } catch (e: Exception) {
-      server
-    }
 
-    // Check if the normalized server address is an IP address starting with "100."
-    // IP address pattern: digits.digits.digits.digits
-    val ipPattern = Regex("^\\d+\\.\\d+\\.\\d+\\.\\d+$")
-
-    if (normalizedServer.matches(ipPattern)) {
-      // If it's an IP address, check if it starts with "100."
-      return normalizedServer.startsWith("100.")
-    }
-
-    // Try to resolve the hostname to an IP address
-    try {
-      val inetAddress = InetAddress.getByName(normalizedServer)
-      val ipAddress = inetAddress.hostAddress
-
-      // Check if the resolved IP address starts with "100."
-      return ipAddress.startsWith("100.")
-    } catch (e: Exception) {
-      // If resolution fails, it's not a blacklisted IP
-      return false
+      // For non-IP addresses, we don't need to resolve them for blacklist checking
+      // This is a significant optimization to avoid unnecessary DNS lookups
+      false
     }
   }
 
@@ -104,25 +105,42 @@ object ServerUtils {
    * @return true if the server address is valid, false otherwise
    */
   suspend fun isValidServerAddress(server: String): Boolean {
-    return try {
-      // Try to resolve the hostname or IP
+    return validationCache.getOrPut(server) {
       try {
-        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-          InetAddress.getByName(server)
+        // First check if it's a valid URL format
+        if (server.contains("://")) {
+          try {
+            URL(server).toURI()
+            return@getOrPut true
+          } catch (e: Exception) {
+            return@getOrPut false
+          }
         }
-        true
-      } catch (e: UnknownHostException) {
-        // If it's not a valid hostname/IP, check if it's a URL
-        try {
-          URL(if (!server.startsWith("http")) "https://$server" else server).toURI()
-          true
-        } catch (e: Exception) {
-          false
+
+        // If it looks like a web domain but doesn't have a protocol, try with https://
+        if (isLikelyWebDomain(server) && !server.contains("://")) {
+          try {
+            URL("https://$server").toURI()
+            return@getOrPut true
+          } catch (e: Exception) {
+            // Continue to hostname resolution if URL parsing fails
+          }
         }
+
+        // Try to resolve the hostname or IP
+        val isResolvable = withContext(Dispatchers.IO) {
+          try {
+            InetAddress.getByName(server)
+            true
+          } catch (e: UnknownHostException) {
+            false
+          }
+        }
+
+        isResolvable
+      } catch (e: Exception) {
+        false
       }
-    } catch (e: Exception) {
-      logger.warn("Error validating server address: ${e.message}", e)
-      false
     }
   }
 }

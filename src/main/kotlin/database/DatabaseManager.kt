@@ -3,17 +3,31 @@ package database
 import org.slf4j.LoggerFactory
 import java.sql.Connection
 import java.sql.DriverManager
+import java.sql.PreparedStatement
 import java.sql.SQLException
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 /**
  * Manages database operations for the bot.
  * Provides generic methods for reading and writing data to the database.
  */
-class DatabaseManager {
+class DatabaseManager private constructor() {
   private val logger = LoggerFactory.getLogger(DatabaseManager::class.java)
   private var connection: Connection? = null
   private val dbFile = "bot_data.db"
+
+  // Cache for server status data to reduce database reads
+  private val serverStatusCache = ConcurrentHashMap<String, ConcurrentHashMap<String, Boolean>>()
+
+  // Prepared statement cache to avoid recreating statements
+  private val preparedStatements = ConcurrentHashMap<String, PreparedStatement>()
+
+  // Lock for thread-safe database operations
+  private val dbLock = ReentrantReadWriteLock()
+
+  // Batch size for database operations
+  private val BATCH_SIZE = 100
 
   /**
    * Initializes the database connection and creates tables if they don't exist.

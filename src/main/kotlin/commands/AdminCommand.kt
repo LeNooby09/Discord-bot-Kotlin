@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
  */
 class AdminCommand : Command {
 	override val name = "admin"
-	override val description = "Admin management commands (verify, generate, list, remove)"
+	override val description = "Admin management commands (verify, generate, list, remove, flush)"
 
 	private val dbManager = DatabaseManager.getInstance()
 
@@ -22,7 +22,7 @@ class AdminCommand : Command {
 		val args = messageText.split(" ")
 
 		if (args.isEmpty() || args[0].isEmpty()) {
-			event.message.channel.createMessage("Please specify a subcommand: verify, generate, list, or remove")
+			event.message.channel.createMessage("Please specify a subcommand: verify, generate, list, remove, or flush")
 			return false
 		}
 
@@ -44,8 +44,9 @@ class AdminCommand : Command {
 			"generate" -> handleGenerateCommand(event, args)
 			"list" -> handleListCommand(event)
 			"remove" -> handleRemoveCommand(event, args)
+			"flush" -> handleFlushCommand(event, args)
 			else -> {
-				event.message.channel.createMessage("Unknown subcommand: ${args[0]}. Available subcommands: verify, generate, list, remove")
+				event.message.channel.createMessage("Unknown subcommand: ${args[0]}. Available subcommands: verify, generate, list, remove, flush")
 				false
 			}
 		}
@@ -193,6 +194,56 @@ class AdminCommand : Command {
 				event.message.channel.createMessage(
 					"A security code has been printed to the console. " +
 						"To confirm removal, run: admin remove $targetUserId <security_code>"
+				)
+				return true
+			} else {
+				event.message.channel.createMessage("Failed to generate a security code. Please try again later.")
+				return false
+			}
+		}
+	}
+
+	/**
+	 * Handles the flush subcommand, which flushes the database (deletes all data except admin users).
+	 * This subcommand is only available to admins and requires a security code
+	 * that is printed to the console when the command is run.
+	 */
+	private suspend fun handleFlushCommand(event: MessageCreateEvent, args: List<String>): Boolean {
+		val userId = event.message.author?.id?.value?.toString() ?: return false
+
+		// If a code is provided, validate it and flush the database
+		if (args.size >= 2) {
+			val code = args[1]
+			val codeType = dbManager.validateAndUseCode(code, userId)
+
+			if (codeType == null || codeType != "admin_flush") {
+				event.message.channel.createMessage("Invalid or already used security code.")
+				return false
+			}
+
+			// Flush the database
+			if (dbManager.flushDatabase()) {
+				event.message.channel.createMessage("Database has been flushed successfully. All data except admin users has been deleted.")
+				logger.info("Admin $userId flushed the database")
+				return true
+			} else {
+				event.message.channel.createMessage("Failed to flush the database. Please try again later.")
+				return false
+			}
+		} else {
+			// Generate a security code and print it to the console
+			val securityCode = dbManager.createVerificationCode("admin_flush", userId)
+
+			if (securityCode != null) {
+				println("\n=============================================================")
+				println("SECURITY CODE FOR DATABASE FLUSH: $securityCode")
+				println("This code is required to flush the database.")
+				println("=============================================================\n")
+
+				event.message.channel.createMessage(
+					"**WARNING**: This will delete all data from the database except admin users.\n" +
+						"A security code has been printed to the console. " +
+						"To confirm database flush, run: admin flush <security_code>"
 				)
 				return true
 			} else {

@@ -463,6 +463,50 @@ class DatabaseManager private constructor() {
 			.joinToString("")
 	}
 
+	/**
+	 * Flushes the database, deleting all data except admin users.
+	 * @return True if the database was flushed successfully, false otherwise
+	 */
+	fun flushDatabase(): Boolean {
+		try {
+			logger.info("Flushing database (preserving admin users)")
+			connection?.let { conn ->
+				// Use a transaction for better consistency
+				conn.autoCommit = false
+
+				// Delete all server status data
+				val deleteServerStatusStatement = conn.createStatement()
+				deleteServerStatusStatement.executeUpdate("DELETE FROM server_status")
+				deleteServerStatusStatement.close()
+				logger.debug("Server status data deleted")
+
+				// Delete all verification codes
+				val deleteVerificationCodesStatement = conn.createStatement()
+				deleteVerificationCodesStatement.executeUpdate("DELETE FROM verification_codes")
+				deleteVerificationCodesStatement.close()
+				logger.debug("Verification codes deleted")
+
+				// Commit the transaction
+				conn.commit()
+				conn.autoCommit = true
+
+				// Clear the server status cache
+				serverStatusCache.clear()
+
+				logger.info("Database flushed successfully (admin users preserved)")
+				return true
+			} ?: run {
+				logger.error("Database connection is null, cannot flush database")
+				return false
+			}
+		} catch (e: SQLException) {
+			logger.error("Error flushing database", e)
+			connection?.rollback()
+			connection?.autoCommit = true
+			return false
+		}
+	}
+
 	companion object {
 		private var instance: DatabaseManager? = null
 

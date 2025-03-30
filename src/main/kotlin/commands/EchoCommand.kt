@@ -10,9 +10,7 @@ class EchoCommand : Command {
   override val description = "Echoes back the text you provide after the command"
 
   override suspend fun execute(event: MessageCreateEvent): Boolean {
-    val content = event.message.content
-    val mention = "<@1327594330130481272>"
-    val messageText = content.removePrefix(mention).trim().removePrefix("echo").trim()
+    val messageText = extractMessageText(event)
 
     if (messageText.isNotEmpty()) {
       event.message.channel.createMessage("Echo: $messageText")

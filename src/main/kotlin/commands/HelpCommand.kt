@@ -13,9 +13,7 @@ class HelpCommand(private val commandRegistry: CommandRegistry) : Command {
   override suspend fun execute(event: MessageCreateEvent): Boolean {
     logger.info("Executing help command")
 
-    val content = event.message.content
-    val mention = "<@1327594330130481272>"
-    val messageText = content.removePrefix(mention).trim().removePrefix("help").trim()
+    val messageText = extractMessageText(event)
 
     // Check if a specific command was requested
     if (messageText.isNotEmpty()) {

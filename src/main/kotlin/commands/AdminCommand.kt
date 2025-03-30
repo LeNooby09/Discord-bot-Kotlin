@@ -2,6 +2,7 @@ package commands
 
 import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
+import org.slf4j.LoggerFactory
 
 /**
  * Command for admin-related functionality.
@@ -184,10 +185,10 @@ class AdminCommand : Command {
       val securityCode = dbManager.createVerificationCode("admin_remove", userId)
 
       if (securityCode != null) {
-        println("\n==================================================")
+        println("\n=============================================================")
         println("SECURITY CODE FOR ADMIN REMOVAL: $securityCode")
         println("This code is required to remove user $targetUserId from admin status.")
-        println("==================================================\n")
+        println("=============================================================\n")
 
         event.message.channel.createMessage(
           "A security code has been printed to the console. " +
@@ -196,6 +197,41 @@ class AdminCommand : Command {
         return true
       } else {
         event.message.channel.createMessage("Failed to generate a security code. Please try again later.")
+        return false
+      }
+    }
+  }
+
+  companion object {
+    /**
+     * Generates a one-time admin verification code if no admins exist.
+     * This is called during bot startup to ensure there's a way to set up the first admin.
+     *
+     * @param dbManager The database manager instance
+     * @return true if a code was generated, false if admins already exist or generation failed
+     */
+    fun generateOneTimeAdminCode(dbManager: DatabaseManager): Boolean {
+      // Get a logger for this companion object
+      val logger = LoggerFactory.getLogger("AdminCommand")
+
+      // Check if any admins exist
+      val admins = dbManager.getAllAdmins()
+      if (admins.isEmpty()) {
+        val adminCode = dbManager.createVerificationCode("admin")
+        if (adminCode != null) {
+          println("\n=============================================================")
+          println("ADMIN VERIFICATION CODE: $adminCode")
+          println("Use this code with the 'admin verify' command to become admin")
+          println("This code can only be used once and will expire after restart")
+          println("=============================================================\n")
+          logger.info("Generated one-time admin verification code")
+          return true
+        } else {
+          logger.error("Failed to generate admin verification code")
+          return false
+        }
+      } else {
+        logger.info("Admin users already exist, skipping verification code generation")
         return false
       }
     }

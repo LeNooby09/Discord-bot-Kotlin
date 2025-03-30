@@ -12,7 +12,6 @@ import java.util.concurrent.ConcurrentHashMap
  * Provides methods for normalizing, validating, and checking server addresses.
  */
 object ServerUtils {
-  private val logger = logger()
 
   // Cache validation results to avoid repeated checks
   private val validationCache = ConcurrentHashMap<String, Boolean>()

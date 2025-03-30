@@ -96,7 +96,6 @@ class StatusCommand : Command {
       }
 
       try {
-        logger.info("Saving user server data to database")
         lastSaveTime = System.currentTimeMillis()
 
         // Create a snapshot of the data to save to avoid concurrent modification
@@ -105,18 +104,30 @@ class StatusCommand : Command {
           dataToSave[userId] = HashMap(serverMap)
         }
 
+        // Log once before saving all data
+        logger.info("Saving server data for ${dataToSave.size} users to database")
+
+        // Track any errors
+        val errors = mutableListOf<String>()
+
         // Save each user's server data to the database
         dataToSave.forEach { (userId, serverMap) ->
           try {
             dbManager.saveServerStatus(userId, serverMap)
           } catch (e: Exception) {
+            errors.add(userId)
             logger.error("Error saving data for user $userId", e)
           }
         }
 
-        logger.info("User server data saved successfully to database")
+        // Log success or partial success
+        if (errors.isEmpty()) {
+          logger.info("Server data for all users saved successfully")
+        } else {
+          logger.warn("Server data saved with errors for ${errors.size} users")
+        }
       } catch (e: Exception) {
-        logger.error("Error saving user server data to database", e)
+        logger.error("Error in save operation", e)
       }
     }
   }
@@ -138,18 +149,18 @@ class StatusCommand : Command {
 
     val username = event.message.author?.username ?: "Unknown"
     val userId = event.message.author?.id?.toString() ?: "unknown"
-    logger.info("Executing status command for user: $username (ID: $userId)")
-
-    // Set the notification channel to the current channel if not already set
-    if (notificationChannel == null) {
-      logger.debug("Setting notification channel")
-      notificationChannel = event.message.channel
-    }
 
     // Parse the subcommand and arguments
     val parts = messageText.split(" ")
     val subcommand = if (parts.isNotEmpty()) parts[0].lowercase() else "help"
-    logger.info("Status subcommand: $subcommand, args: ${parts.drop(1)}")
+
+    // Single consolidated log message with all relevant information
+    logger.info("Executing status command: $subcommand ${parts.drop(1)} for user: $username (ID: $userId)")
+
+    // Set the notification channel to the current channel if not already set
+    if (notificationChannel == null) {
+      notificationChannel = event.message.channel
+    }
 
     when (subcommand) {
       "check" -> handleCheckCommand(event, parts.drop(1))
@@ -159,15 +170,11 @@ class StatusCommand : Command {
       else -> handleHelpCommand(event)
     }
 
-    logger.debug("Status command execution completed")
     return true
   }
 
   private suspend fun handleCheckCommand(event: MessageCreateEvent, args: List<String>) = coroutineScope {
-    logger.debug("Handling check command")
-
     if (args.isEmpty()) {
-      logger.info("Check command called without server argument")
       event.message.channel.createMessage("Please specify a server to check. Usage: status check <server>")
       return@coroutineScope
     }
@@ -176,14 +183,13 @@ class StatusCommand : Command {
     logger.info("Checking status of server: $server")
 
     // Check if the server is in the IP blacklist
-    if (isIpBlacklisted(server)) {
+    if (ServerUtils.isIpBlacklisted(server)) {
       logger.warn("Attempted to check blacklisted IP: $server")
       event.message.channel.createMessage("This IP address is blacklisted and cannot be checked.")
       return@coroutineScope
     }
 
     // Send initial message indicating check is in progress
-    logger.debug("Sending initial status message")
     event.message.channel.createMessage("Checking server $server status...")
 
     // Store the channel for later use
@@ -194,20 +200,19 @@ class StatusCommand : Command {
     launch(networkDispatcher) {
       try {
         // Perform the server check
-        logger.debug("Performing status check for server: $server")
         val isOnline = checkServerStatus(server)
 
         // Create the status message
         val statusMessage = if (isOnline) {
-          logger.info("Server $server is online")
           "Server $server is online"
         } else {
-          logger.info("Server $server is offline")
           "Server $server is offline"
         }
 
+        // Log the result
+        logger.info("Server $server status check result: ${if (isOnline) "online" else "offline"}")
+
         // Send the result as a new message
-        logger.debug("Sending status result message")
         channel.createMessage(statusMessage)
       } catch (e: Exception) {
         // Handle any errors
@@ -227,7 +232,7 @@ class StatusCommand : Command {
     val userId = event.message.author?.id?.toString() ?: "unknown"
 
     // Check if the server is in the IP blacklist
-    if (isIpBlacklisted(server)) {
+    if (ServerUtils.isIpBlacklisted(server)) {
       event.message.channel.createMessage("This IP address is blacklisted and cannot be monitored.")
       return@coroutineScope
     }
@@ -505,30 +510,6 @@ class StatusCommand : Command {
     }
   }
 
-  /**
-   * Checks if a domain is likely a web domain (vs. a plain IP or service)
-   * Delegates to ServerUtils
-   */
-  private fun isLikelyWebDomain(server: String): Boolean {
-    return ServerUtils.isLikelyWebDomain(server)
-  }
-
   // This method has been removed as it duplicates functionality in NetworkUtils.checkServerStatus
   // The checkServerStatus method above now delegates to NetworkUtils.checkServerStatus
-
-  /**
-   * Checks if an IP address is blacklisted
-   * Currently blacklists all IPs starting with "100."
-   */
-  private fun isIpBlacklisted(server: String): Boolean {
-    return ServerUtils.isIpBlacklisted(server)
-  }
-
-  /**
-   * Normalizes a server address by extracting just the hostname/domain part
-   * Delegates to ServerUtils
-   */
-  private fun normalizeServerAddress(server: String): String {
-    return ServerUtils.normalizeServerAddress(server)
-  }
 }

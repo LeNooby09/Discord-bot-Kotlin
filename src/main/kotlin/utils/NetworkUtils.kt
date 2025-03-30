@@ -34,18 +34,26 @@ object NetworkUtils {
    */
   suspend fun checkServerStatus(server: String): Boolean {
     val normalizedServer = ServerUtils.normalizeServerAddress(server)
+    logger.debug("Checking status for server: $normalizedServer")
 
     // First try HTTP/HTTPS connection for web domains
     if (ServerUtils.isLikelyWebDomain(server)) {
       try {
-        return checkWebDomainStatus(server)
+        logger.debug("Server $normalizedServer appears to be a web domain, trying HTTP/HTTPS")
+        val result = checkWebDomainStatus(server)
+        logger.debug("Web domain check for $normalizedServer result: ${if (result) "online" else "offline"}")
+        return result
       } catch (e: Exception) {
+        logger.debug("HTTP/HTTPS check failed for $normalizedServer, falling back to ping", e)
         // Fall back to ping if HTTP check fails
       }
     }
 
     // Try to ping the server as fallback or for non-web domains
-    return pingServer(normalizedServer)
+    logger.debug("Using ping to check $normalizedServer")
+    val pingResult = pingServer(normalizedServer)
+    logger.debug("Ping check for $normalizedServer result: ${if (pingResult) "online" else "offline"}")
+    return pingResult
   }
 
   /**
@@ -90,8 +98,11 @@ object NetworkUtils {
         else -> server
       }
 
+      logger.debug("Attempting ${if (useHttps) "HTTPS" else "HTTP"} request to: $urlStr")
+
       // Try to get connection from pool or create new one
       val connection = connectionPool.getOrPut(urlStr) {
+        logger.debug("Connection pool miss for $urlStr, creating new connection")
         (URL(urlStr).openConnection() as HttpURLConnection).apply {
           connectTimeout = CONNECTION_TIMEOUT
           readTimeout = READ_TIMEOUT
@@ -102,11 +113,19 @@ object NetworkUtils {
         }
       }
 
+      logger.debug("Sending request to $urlStr with timeout ${CONNECTION_TIMEOUT}ms")
       val responseCode = connection.responseCode
+      logger.debug("Received response code $responseCode from $urlStr")
 
       // Consider 2xx and 3xx response codes as "online"
-      responseCode in 200..399
+      val isSuccess = responseCode in 200..399
+      if (!isSuccess) {
+        logger.debug("Request to $urlStr failed with response code $responseCode")
+      }
+
+      isSuccess
     } catch (e: Exception) {
+      logger.debug("Exception during ${if (useHttps) "HTTPS" else "HTTP"} request to $server: ${e.message}")
       false
     }
   }
@@ -119,15 +138,27 @@ object NetworkUtils {
    */
   private suspend fun pingServer(server: String): Boolean = withContext(Dispatchers.IO) {
     try {
+      logger.debug("Attempting to ping server: $server")
+
       // Use cached DNS resolution if available
       val address = dnsCache.getOrPut(server) {
+        logger.debug("DNS cache miss for $server, resolving address")
         InetAddress.getByName(server)
       }
 
-      withTimeoutOrNull(PING_TIMEOUT.milliseconds) {
+      logger.debug("Resolved $server to ${address.hostAddress}, pinging with timeout ${PING_TIMEOUT}ms")
+
+      val result = withTimeoutOrNull(PING_TIMEOUT.milliseconds) {
         address.isReachable(PING_TIMEOUT)
       } ?: false
+
+      if (!result) {
+        logger.debug("Ping to $server (${address.hostAddress}) failed or timed out")
+      }
+
+      result
     } catch (e: Exception) {
+      logger.debug("Exception while pinging $server: ${e.message}")
       false
     }
   }

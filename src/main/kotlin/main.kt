@@ -1,4 +1,5 @@
 import commands.AdminCommand
+import commands.BotConfig
 import commands.CommandRegistry
 import database.DatabaseManager
 import dev.kord.core.Kord
@@ -56,6 +57,7 @@ suspend fun main() {
 	// Initialize Kord and set up commands
 	val kord = Kord(token)
 	val mention = "<@1327594330130481272>"
+	BotConfig.mention = mention
 	logger.info("Initializing bot with mention ID: $mention")
 
 	// Create command registry and register all commands

@@ -1,5 +1,6 @@
 package commands
 
+import database.DatabaseManager
 import dev.kord.core.Kord
 import dev.kord.core.event.message.MessageCreateEvent
 import dev.kord.core.on
@@ -179,17 +180,56 @@ class CommandRegistry {
 			if (message.author?.isBot != false) return@on
 
 			val content = message.content
-			// Skip messages that don't start with the bot's mention
-			if (!content.startsWith(mention)) return@on
-
 			val authorName = message.author?.username ?: "Unknown"
 			val channelId = message.channelId.toString()
-			logger.info("Received command message from $authorName in channel $channelId: $content")
 
-			// Extract the command name from the message
-			val commandText = content.removePrefix(mention).trim()
-			val commandName = commandText.split(" ")[0]
-			logger.debug("Parsed command name: $commandName")
+			// Check if this is a DM channel
+			val isDM = message.getChannel().type == dev.kord.common.entity.ChannelType.DM
+
+			// Variables to store command information
+			var commandText = ""
+			var commandName = ""
+
+			// Process messages differently based on whether they're from a DM or not
+			if (isDM) {
+				// In DMs, process the message directly as a command without requiring the mention
+				logger.info("Received DM command message from $authorName in channel $channelId: $content")
+
+				// Extract the command name from the message
+				commandText = content.trim()
+				commandName = commandText.split(" ")[0]
+				logger.debug("Parsed DM command name: $commandName")
+			} else {
+				// In servers, check for both the mention and the custom prefix
+				val serverId = try {
+					message.getGuild().id.toString()
+				} catch (e: Exception) {
+					logger.error("Failed to get guild ID", e)
+					return@on
+				}
+				val dbManager = DatabaseManager.getInstance()
+				val serverPrefix = dbManager.getServerPrefix(serverId)
+
+				// Check if the message starts with either the mention or the custom prefix
+				if (content.startsWith(mention)) {
+					logger.info("Received server command message (mention) from $authorName in channel $channelId: $content")
+
+					// Extract the command name from the message
+					commandText = content.removePrefix(mention).trim()
+					commandName = commandText.split(" ")[0]
+					logger.debug("Parsed server command name (mention): $commandName")
+				} else if (content.startsWith(serverPrefix)) {
+					logger.info("Received server command message (prefix: $serverPrefix) from $authorName in channel $channelId: $content")
+
+					// Extract the command name from the message
+					commandText = content.removePrefix(serverPrefix).trim()
+					commandName = commandText.split(" ")[0]
+					logger.debug("Parsed server command name (prefix): $commandName")
+				} else {
+					// Skip messages that don't start with either the mention or the custom prefix
+					return@on
+				}
+			}
 
 			// Execute the command if it exists
 			val command = commands[commandName]

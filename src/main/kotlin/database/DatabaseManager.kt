@@ -44,6 +44,12 @@ class DatabaseManager private constructor() {
 
 			// Create tables if they don't exist
 			createTables()
+
+			// Initialize the ServerCustomizationManager
+			val serverCustomizationManager = ServerCustomizationManager.getInstance()
+			serverCustomizationManager.initialize(connection)
+			serverCustomizationManager.createTables()
+			logger.info("ServerCustomizationManager initialized")
 		} catch (e: Exception) {
 			logger.error("Failed to initialize database", e)
 			throw RuntimeException("Failed to initialize database", e)
@@ -497,6 +503,11 @@ class DatabaseManager private constructor() {
 				deleteVerificationCodesStatement.close()
 				logger.debug("Verification codes deleted")
 
+				// Flush server customization data
+				val serverCustomizationManager = ServerCustomizationManager.getInstance()
+				serverCustomizationManager.flushData()
+				logger.debug("Server customization data flushed")
+
 				// Commit the transaction
 				conn.commit()
 				conn.autoCommit = true
@@ -514,6 +525,37 @@ class DatabaseManager private constructor() {
 			utils.Logger.Database.logError(logger, "flushing database", e, connection)
 			return false
 		}
+	}
+
+	/**
+	 * Gets the prefix for a specific server.
+	 * Delegates to ServerCustomizationManager.
+	 * @param serverId The ID of the server
+	 * @return The prefix for the server, or "!" if none is set
+	 */
+	fun getServerPrefix(serverId: String): String {
+		return ServerCustomizationManager.getInstance().getServerPrefix(serverId)
+	}
+
+	/**
+	 * Sets the prefix for a specific server.
+	 * Delegates to ServerCustomizationManager.
+	 * @param serverId The ID of the server
+	 * @param prefix The prefix to set
+	 * @return True if the prefix was set successfully, false otherwise
+	 */
+	fun setServerPrefix(serverId: String, prefix: String): Boolean {
+		return ServerCustomizationManager.getInstance().setServerPrefix(serverId, prefix)
+	}
+
+	/**
+	 * Removes the prefix for a specific server, resetting it to the default.
+	 * Delegates to ServerCustomizationManager.
+	 * @param serverId The ID of the server
+	 * @return True if the prefix was removed successfully, false otherwise
+	 */
+	fun removeServerPrefix(serverId: String): Boolean {
+		return ServerCustomizationManager.getInstance().removeServerPrefix(serverId)
 	}
 
 	companion object {

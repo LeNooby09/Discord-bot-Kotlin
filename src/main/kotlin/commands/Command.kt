@@ -1,8 +1,21 @@
 package commands
 
+import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
 import org.slf4j.Logger
 import utils.logger
+
+/**
+ * Configuration for the bot.
+ * This is used to store global configuration values that are used across the bot.
+ */
+object BotConfig {
+	/**
+	 * The bot's mention string used in commands.
+	 * This is set in main.kt when the bot starts.
+	 */
+	var mention: String = "<@1327594330130481272>" // Default value, will be overridden in main.kt
+}
 
 /**
  * Interface for all bot commands.
@@ -37,17 +50,54 @@ interface Command {
 	suspend fun execute(event: MessageCreateEvent): Boolean
 
 	/**
-	 * Extracts the message text after the bot mention and command name.
+	 * Extracts the message text after the bot mention/prefix and command name.
 	 * This is a utility method to avoid duplicating this logic in each command.
+	 * Handles DM messages (no prefix required), mention-prefixed server messages,
+	 * and custom prefix-prefixed server messages.
 	 *
 	 * @param event The message event
 	 * @param commandName The name of the command to remove from the message
-	 * @return The message text without the mention and command name
+	 * @return The message text without the prefix and command name
 	 */
-	fun extractMessageText(event: MessageCreateEvent, commandName: String = ""): String {
+	suspend fun extractMessageText(event: MessageCreateEvent, commandName: String = ""): String {
 		val content = event.message.content
-		val mention = "<@1327594330130481272>"
 		val nameToRemove = commandName.ifEmpty { name }
-		return content.removePrefix(mention).trim().removePrefix(nameToRemove).trim()
+
+		// Check if this is a DM channel
+		val isDM = event.message.getChannel().type == dev.kord.common.entity.ChannelType.DM
+
+		if (isDM) {
+			// In DMs, just remove the command name
+			return content.trim().removePrefix(nameToRemove).trim()
+		} else {
+			// In servers, determine which prefix was used (mention or custom)
+			val mention = BotConfig.mention
+			val serverId = try {
+				event.message.getGuild().id.toString()
+			} catch (e: Exception) {
+				// If we can't get the guild ID, just use the default prefix
+				logger.error("Failed to get guild ID in extractMessageText", e)
+				return content.trim().removePrefix(nameToRemove).trim()
+			}
+			val dbManager = DatabaseManager.getInstance()
+			val serverPrefix = dbManager.getServerPrefix(serverId)
+
+			// Check which prefix was used and remove it
+			return when {
+				content.startsWith(mention) -> {
+					content.removePrefix(mention).trim().removePrefix(nameToRemove).trim()
+				}
+
+				content.startsWith(serverPrefix) -> {
+					content.removePrefix(serverPrefix).trim().removePrefix(nameToRemove).trim()
+				}
+
+				else -> {
+					// This shouldn't happen as the CommandRegistry already checks for prefixes
+					// But just in case, return the content without the command name
+					content.trim().removePrefix(nameToRemove).trim()
+				}
+			}
+		}
 	}
 }

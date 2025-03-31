@@ -1,6 +1,7 @@
 package commands
 
 import database.DatabaseManager
+import dev.kord.common.entity.Permission
 import dev.kord.core.event.message.MessageCreateEvent
 
 /**
@@ -9,7 +10,7 @@ import dev.kord.core.event.message.MessageCreateEvent
  */
 class PrefixCommand : Command {
 	override val name = "prefix"
-	override val description = "Manage the custom prefix for this server (admin only)"
+	override val description = "Manage the custom prefix for this server (server admin only)"
 
 	override suspend fun execute(event: MessageCreateEvent): Boolean {
 		val messageText = extractMessageText(event)
@@ -33,9 +34,19 @@ class PrefixCommand : Command {
 		}
 		val userId = event.message.author?.id?.toString() ?: ""
 
-		// Check if the user is an admin
-		if (!dbManager.isAdmin(userId)) {
-			event.message.channel.createMessage("You must be a bot admin to use this command.")
+		// Check if the user is a server admin
+		val member = try {
+			event.message.getAuthorAsMember()
+		} catch (e: Exception) {
+			logger.error("Failed to get member in PrefixCommand", e)
+			event.message.channel.createMessage("Failed to get user information. Please try again later.")
+			return false
+		}
+
+		// Check if the member has administrator permission
+		val hasAdminPermission = member.getPermissions().contains(Permission.Administrator)
+		if (!hasAdminPermission) {
+			event.message.channel.createMessage("You must be a server administrator to use this command.")
 			return false
 		}
 
@@ -83,7 +94,7 @@ class PrefixCommand : Command {
 				val helpMessage = """
                     **Prefix Command Help**
 
-                    Manage the custom prefix for this server (admin only).
+                    Manage the custom prefix for this server (server admin only).
 
                     **Subcommands:**
                     > `prefix` - Display the current prefix

@@ -41,10 +41,9 @@ object NetworkUtils {
 			try {
 				logger.debug("Server $normalizedServer appears to be a web domain, trying HTTP/HTTPS")
 				val result = checkWebDomainStatus(server)
-				logger.debug("Web domain check for $normalizedServer result: ${if (result) "online" else "offline"}")
 				return result
 			} catch (e: Exception) {
-				logger.debug("HTTP/HTTPS check failed for $normalizedServer, falling back to ping", e)
+				Logger.Network.logException(logger, "HTTP/HTTPS check", normalizedServer, e)
 				// Fall back to ping if HTTP check fails
 			}
 		}
@@ -52,7 +51,7 @@ object NetworkUtils {
 		// Try to ping the server as fallback or for non-web domains
 		logger.debug("Using ping to check $normalizedServer")
 		val pingResult = pingServer(normalizedServer)
-		logger.debug("Ping check for $normalizedServer result: ${if (pingResult) "online" else "offline"}")
+		Logger.Network.logServerStatus(logger, normalizedServer, pingResult, "Ping")
 		return pingResult
 	}
 
@@ -77,7 +76,9 @@ object NetworkUtils {
 		}
 
 		// Return true if either HTTP or HTTPS check succeeds
-		httpsDeferred.await() || httpDeferred.await()
+		val result = httpsDeferred.await() || httpDeferred.await()
+		Logger.Network.logServerStatus(logger, server, result, "Web domain")
+		result
 	}
 
 	/**
@@ -98,7 +99,8 @@ object NetworkUtils {
 				else -> server
 			}
 
-			logger.debug("Attempting ${if (useHttps) "HTTPS" else "HTTP"} request to: $urlStr")
+			val method = if (useHttps) "HTTPS" else "HTTP"
+			logger.debug("Attempting $method request to: $urlStr")
 
 			// Try to get connection from pool or create new one
 			val connection = connectionPool.getOrPut(urlStr) {
@@ -123,9 +125,10 @@ object NetworkUtils {
 				logger.debug("Request to $urlStr failed with response code $responseCode")
 			}
 
+			Logger.Network.logServerStatus(logger, urlStr, isSuccess, method)
 			isSuccess
 		} catch (e: Exception) {
-			logger.debug("Exception during ${if (useHttps) "HTTPS" else "HTTP"} request to $server: ${e.message}")
+			Logger.Network.logException(logger, if (useHttps) "HTTPS" else "HTTP", server, e)
 			false
 		}
 	}
@@ -158,7 +161,7 @@ object NetworkUtils {
 
 			result
 		} catch (e: Exception) {
-			logger.debug("Exception while pinging $server: ${e.message}")
+			Logger.Network.logException(logger, "ping", server, e)
 			false
 		}
 	}

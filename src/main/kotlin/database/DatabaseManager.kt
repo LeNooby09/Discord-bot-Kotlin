@@ -134,12 +134,10 @@ class DatabaseManager private constructor() {
 				conn.autoCommit = true
 				logger.debug("Server status data saved successfully for user $userId")
 			} ?: run {
-				logger.error("Database connection is null, cannot save server status data")
+				utils.Logger.Database.logNullConnection(logger, "save server status data")
 			}
 		} catch (e: SQLException) {
-			logger.error("Error saving server status data", e)
-			connection?.rollback()
-			connection?.autoCommit = true
+			utils.Logger.Database.logError(logger, "saving server status data", e, connection)
 		}
 	}
 
@@ -169,10 +167,10 @@ class DatabaseManager private constructor() {
 				statement.close()
 				logger.debug("Loaded server status data for ${result.size} users")
 			} ?: run {
-				logger.error("Database connection is null, cannot load server status data")
+				utils.Logger.Database.logNullConnection(logger, "load server status data")
 			}
 		} catch (e: SQLException) {
-			logger.error("Error loading server status data", e)
+			utils.Logger.Database.logError(logger, "loading server status data", e, connection)
 		}
 
 		return result
@@ -203,10 +201,10 @@ class DatabaseManager private constructor() {
 				statement.close()
 				logger.debug("Loaded ${result.size} servers for user $userId")
 			} ?: run {
-				logger.error("Database connection is null, cannot load server status data")
+				utils.Logger.Database.logNullConnection(logger, "load server status data")
 			}
 		} catch (e: SQLException) {
-			logger.error("Error loading server status data for user $userId", e)
+			utils.Logger.Database.logError(logger, "loading server status data for user $userId", e, connection)
 		}
 
 		return result
@@ -221,7 +219,7 @@ class DatabaseManager private constructor() {
 			connection?.close()
 			logger.info("Database connection closed")
 		} catch (e: SQLException) {
-			logger.error("Error closing database connection", e)
+			utils.Logger.Database.logError(logger, "closing database connection", e, null)
 		}
 	}
 
@@ -248,11 +246,11 @@ class DatabaseManager private constructor() {
 				logger.info("Admin user $username ($userId) added successfully")
 				return result
 			} ?: run {
-				logger.error("Database connection is null, cannot add admin user")
+				utils.Logger.Database.logNullConnection(logger, "add admin user")
 				return false
 			}
 		} catch (e: SQLException) {
-			logger.error("Error adding admin user", e)
+			utils.Logger.Database.logError(logger, "adding admin user", e, connection)
 			return false
 		}
 	}
@@ -276,11 +274,11 @@ class DatabaseManager private constructor() {
 
 				return isAdmin
 			} ?: run {
-				logger.error("Database connection is null, cannot check admin status")
+				utils.Logger.Database.logNullConnection(logger, "check admin status")
 				return false
 			}
 		} catch (e: SQLException) {
-			logger.error("Error checking admin status", e)
+			utils.Logger.Database.logError(logger, "checking admin status", e, connection)
 			return false
 		}
 	}
@@ -308,10 +306,10 @@ class DatabaseManager private constructor() {
 				statement.close()
 				logger.debug("Found ${admins.size} admin users")
 			} ?: run {
-				logger.error("Database connection is null, cannot get admin users")
+				utils.Logger.Database.logNullConnection(logger, "get admin users")
 			}
 		} catch (e: SQLException) {
-			logger.error("Error getting admin users", e)
+			utils.Logger.Database.logError(logger, "getting admin users", e, connection)
 		}
 
 		return admins
@@ -340,17 +338,17 @@ class DatabaseManager private constructor() {
 
 				return result
 			} ?: run {
-				logger.error("Database connection is null, cannot remove admin user")
+				utils.Logger.Database.logNullConnection(logger, "remove admin user")
 				return false
 			}
 		} catch (e: SQLException) {
-			logger.error("Error removing admin user", e)
+			utils.Logger.Database.logError(logger, "removing admin user", e, connection)
 			return false
 		}
 	}
 
 	/**
-	 * Creates a verification code.
+	 * Creates a verification code that expires after 5 minutes.
 	 * @param type The type of code (e.g., "admin", "user")
 	 * @param createdBy The user ID of the admin who created the code (null for system-generated codes)
 	 * @return The generated code, or null if an error occurred
@@ -384,11 +382,11 @@ class DatabaseManager private constructor() {
 					return null
 				}
 			} ?: run {
-				logger.error("Database connection is null, cannot create verification code")
+				utils.Logger.Database.logNullConnection(logger, "create verification code")
 				return null
 			}
 		} catch (e: SQLException) {
-			logger.error("Error creating verification code", e)
+			utils.Logger.Database.logError(logger, "creating verification code", e, connection)
 			return null
 		}
 	}
@@ -405,9 +403,12 @@ class DatabaseManager private constructor() {
 			connection?.let { conn ->
 				conn.autoCommit = false
 
-				// Check if the code exists and is unused
+				// Check if the code exists, is unused, and is not older than 5 minutes
+				val currentTime = System.currentTimeMillis()
+				val fiveMinutesAgo = currentTime - (5 * 60 * 1000) // 5 minutes in milliseconds
+
 				val checkStatement = conn.prepareStatement(
-					"SELECT type FROM verification_codes WHERE code = ? AND used = 0"
+					"SELECT type, created_at FROM verification_codes WHERE code = ? AND used = 0"
 				)
 				checkStatement.setString(1, code)
 				val resultSet = checkStatement.executeQuery()
@@ -423,6 +424,18 @@ class DatabaseManager private constructor() {
 				}
 
 				val codeType = resultSet.getString("type")
+				val createdAt = resultSet.getLong("created_at")
+
+				// Check if the code has expired (older than 5 minutes)
+				if (createdAt < fiveMinutesAgo) {
+					resultSet.close()
+					checkStatement.close()
+					conn.rollback()
+					conn.autoCommit = true
+					logger.debug("Expired verification code: $code (created at $createdAt, now $currentTime)")
+					return null
+				}
+
 				resultSet.close()
 				checkStatement.close()
 
@@ -441,13 +454,11 @@ class DatabaseManager private constructor() {
 				logger.info("Verification code $code successfully used by $userId (type: $codeType)")
 				return codeType
 			} ?: run {
-				logger.error("Database connection is null, cannot validate verification code")
+				utils.Logger.Database.logNullConnection(logger, "validate verification code")
 				return null
 			}
 		} catch (e: SQLException) {
-			logger.error("Error validating verification code", e)
-			connection?.rollback()
-			connection?.autoCommit = true
+			utils.Logger.Database.logError(logger, "validating verification code", e, connection)
 			return null
 		}
 	}
@@ -496,13 +507,11 @@ class DatabaseManager private constructor() {
 				logger.info("Database flushed successfully (admin users preserved)")
 				return true
 			} ?: run {
-				logger.error("Database connection is null, cannot flush database")
+				utils.Logger.Database.logNullConnection(logger, "flush database")
 				return false
 			}
 		} catch (e: SQLException) {
-			logger.error("Error flushing database", e)
-			connection?.rollback()
-			connection?.autoCommit = true
+			utils.Logger.Database.logError(logger, "flushing database", e, connection)
 			return false
 		}
 	}

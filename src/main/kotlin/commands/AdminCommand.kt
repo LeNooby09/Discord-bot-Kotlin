@@ -11,7 +11,7 @@ import org.slf4j.LoggerFactory
  */
 class AdminCommand : Command {
 	override val name = "admin"
-	override val description = "Admin management commands (verify, generate, list, remove, flush)"
+	override val description = "Admin management commands"
 
 	private val dbManager = DatabaseManager.getInstance()
 
@@ -69,7 +69,7 @@ class AdminCommand : Command {
 		val codeType = dbManager.validateAndUseCode(code, userId)
 
 		if (codeType == null) {
-			event.message.channel.createMessage("Invalid or already used verification code.")
+			event.message.channel.createMessage("Invalid, expired, or already used verification code. Note that codes expire after 5 minutes.")
 			return false
 		}
 
@@ -139,6 +139,7 @@ class AdminCommand : Command {
 	 * Handles the remove subcommand, which removes a user from admin status.
 	 * This subcommand is only available to admins and requires a security code
 	 * that is printed to the console when the command is run.
+	 * Security codes expire after 5 minutes.
 	 */
 	private suspend fun handleRemoveCommand(event: MessageCreateEvent, args: List<String>): Boolean {
 		val userId = event.message.author?.id?.value?.toString() ?: return false
@@ -168,7 +169,7 @@ class AdminCommand : Command {
 			val codeType = dbManager.validateAndUseCode(code, userId)
 
 			if (codeType == null || codeType != "admin_remove") {
-				event.message.channel.createMessage("Invalid or already used security code.")
+				event.message.channel.createMessage("Invalid, expired, or already used security code. Note that codes expire after 5 minutes.")
 				return false
 			}
 
@@ -189,11 +190,13 @@ class AdminCommand : Command {
 				println("\n=============================================================")
 				println("SECURITY CODE FOR ADMIN REMOVAL: $securityCode")
 				println("This code is required to remove user $targetUserId from admin status.")
+				println("This code will expire after 5 minutes.")
 				println("=============================================================\n")
 
 				event.message.channel.createMessage(
 					"A security code has been printed to the console. " +
-						"To confirm removal, run: admin remove $targetUserId <security_code>"
+						"To confirm removal, run: admin remove $targetUserId <security_code>\n" +
+						"Note: The security code will expire after 5 minutes."
 				)
 				return true
 			} else {
@@ -207,6 +210,7 @@ class AdminCommand : Command {
 	 * Handles the flush subcommand, which flushes the database (deletes all data except admin users).
 	 * This subcommand is only available to admins and requires a security code
 	 * that is printed to the console when the command is run.
+	 * Security codes expire after 5 minutes.
 	 */
 	private suspend fun handleFlushCommand(event: MessageCreateEvent, args: List<String>): Boolean {
 		val userId = event.message.author?.id?.value?.toString() ?: return false
@@ -217,7 +221,7 @@ class AdminCommand : Command {
 			val codeType = dbManager.validateAndUseCode(code, userId)
 
 			if (codeType == null || codeType != "admin_flush") {
-				event.message.channel.createMessage("Invalid or already used security code.")
+				event.message.channel.createMessage("Invalid, expired, or already used security code. Note that codes expire after 5 minutes.")
 				return false
 			}
 
@@ -238,12 +242,14 @@ class AdminCommand : Command {
 				println("\n=============================================================")
 				println("SECURITY CODE FOR DATABASE FLUSH: $securityCode")
 				println("This code is required to flush the database.")
+				println("This code will expire after 5 minutes.")
 				println("=============================================================\n")
 
 				event.message.channel.createMessage(
 					"**WARNING**: This will delete all data from the database except admin users.\n" +
 						"A security code has been printed to the console. " +
-						"To confirm database flush, run: admin flush <security_code>"
+						"To confirm database flush, run: admin flush <security_code>\n" +
+						"Note: The security code will expire after 5 minutes."
 				)
 				return true
 			} else {
@@ -257,6 +263,7 @@ class AdminCommand : Command {
 		/**
 		 * Generates a one-time admin verification code if no admins exist.
 		 * This is called during bot startup to ensure there's a way to set up the first admin.
+		 * The verification code expires after 5 minutes.
 		 *
 		 * @param dbManager The database manager instance
 		 * @return true if a code was generated, false if admins already exist or generation failed
@@ -273,7 +280,7 @@ class AdminCommand : Command {
 					println("\n=============================================================")
 					println("ADMIN VERIFICATION CODE: $adminCode")
 					println("Use this code with the 'admin verify' command to become admin")
-					println("This code can only be used once and will expire after restart")
+					println("This code can only be used once and will expire after 5 minutes")
 					println("=============================================================\n")
 					logger.info("Generated one-time admin verification code")
 					return true

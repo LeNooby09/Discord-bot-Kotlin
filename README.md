@@ -68,11 +68,22 @@ additional text or whitespace.
 The bot uses a SQLite database stored in `bot_data.db` in the project root. This file will be created automatically when
 the bot is first run.
 
+### Logging
+
+The bot uses Logback for logging. Logs are written to both the console and log files:
+
+- Log files are stored in the `logs` directory
+- The current log file is named `discord-bot.log`
+- Log files are rotated daily and when they reach 10MB in size
+- Compressed archives of old logs are kept for 30 days, with a total cap of 1GB
+- Log levels can be configured in `src/main/resources/logback.xml`
+
 ## Dependencies
 
 - [Kord](https://github.com/kordlib/kord): Kotlin Discord API wrapper
 - [SQLite JDBC](https://github.com/xerial/sqlite-jdbc): JDBC driver for SQLite
 - [SLF4J](http://www.slf4j.org/): Simple Logging Facade for Java
+- [Logback](https://logback.qos.ch/): Logging implementation for SLF4J
 
 ## Development
 

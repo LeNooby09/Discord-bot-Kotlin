@@ -4,9 +4,13 @@ import database.DatabaseManager
 import dev.kord.core.Kord
 import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.io.IOException
+import java.nio.file.Files
+import java.nio.file.Paths
 
 // Get logger for the main class
 private val logger = LoggerFactory.getLogger("MainKt")
@@ -20,6 +24,19 @@ private val token: String = try {
 }
 
 suspend fun main() {
+	// Create logs directory if it doesn't exist
+	try {
+		val logsPath = Paths.get("logs")
+		if (!Files.exists(logsPath)) {
+			withContext(Dispatchers.IO) {
+				Files.createDirectories(logsPath)
+			}
+			println("Created logs directory")
+		}
+	} catch (e: IOException) {
+		println("Warning: Failed to create logs directory: ${e.message}")
+	}
+
 	logger.info("Starting Discord bot")
 
 	// Initialize the database

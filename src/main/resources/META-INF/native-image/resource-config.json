@@ -1,0 +1,22 @@
+{
+	"resources": {
+		"includes": [
+			{
+				"pattern": "logback.xml"
+			},
+			{
+				"pattern": "META-INF/services/.*"
+			},
+			{
+				"pattern": "META-INF/maven/.*"
+			},
+			{
+				"pattern": ".*\\.properties"
+			},
+			{
+				"pattern": ".*\\.conf"
+			}
+		]
+	},
+	"bundles": []
+}

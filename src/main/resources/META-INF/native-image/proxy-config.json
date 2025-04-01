@@ -1,0 +1,20 @@
+[
+	[
+		"java.lang.AutoCloseable"
+	],
+	[
+		"java.sql.Connection"
+	],
+	[
+		"java.sql.Statement"
+	],
+	[
+		"java.sql.PreparedStatement"
+	],
+	[
+		"java.sql.ResultSet"
+	],
+	[
+		"java.sql.Driver"
+	]
+]

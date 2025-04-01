@@ -1,0 +1,143 @@
+[
+	{
+		"name": "org.sqlite.JDBC",
+		"methods": [
+			{
+				"name": "<init>",
+				"parameterTypes": []
+			}
+		],
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "commands.Command",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "commands.PingCommand",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "commands.PrefixCommand",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "commands.StatusCommand",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "commands.AdminCommand",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "commands.AdminStatusHandler",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	},
+	{
+		"name": "database.DatabaseManager",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true,
+		"allDeclaredFields": true,
+		"allPublicFields": true
+	},
+	{
+		"name": "database.ServerCustomizationManager",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true,
+		"allDeclaredFields": true,
+		"allPublicFields": true
+	},
+	{
+		"name": "database.BotCustomizationManager",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true,
+		"allDeclaredFields": true,
+		"allPublicFields": true
+	},
+	{
+		"name": "java.sql.DriverManager",
+		"methods": [
+			{
+				"name": "getConnection",
+				"parameterTypes": [
+					"java.lang.String"
+				]
+			},
+			{
+				"name": "getConnection",
+				"parameterTypes": [
+					"java.lang.String",
+					"java.lang.String",
+					"java.lang.String"
+				]
+			}
+		]
+	},
+	{
+		"name": "java.sql.Connection",
+		"methods": [
+			{
+				"name": "createStatement",
+				"parameterTypes": []
+			},
+			{
+				"name": "prepareStatement",
+				"parameterTypes": [
+					"java.lang.String"
+				]
+			},
+			{
+				"name": "close",
+				"parameterTypes": []
+			},
+			{
+				"name": "commit",
+				"parameterTypes": []
+			},
+			{
+				"name": "rollback",
+				"parameterTypes": []
+			},
+			{
+				"name": "setAutoCommit",
+				"parameterTypes": [
+					"boolean"
+				]
+			}
+		]
+	},
+	{
+		"name": "ch.qos.logback.classic.Logger",
+		"allDeclaredConstructors": true,
+		"allPublicConstructors": true,
+		"allDeclaredMethods": true,
+		"allPublicMethods": true
+	}
+]

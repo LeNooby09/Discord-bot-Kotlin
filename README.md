@@ -34,7 +34,7 @@ status monitoring capabilities.
 
 ### Prerequisites
 
-- GraalVM 24.0.0 or higher (or any JDK 17 or higher for non-native builds)
+- JDK 11 or higher
 - Maven
 
 ### Installation
@@ -45,29 +45,19 @@ status monitoring capabilities.
    cd Discord-bot-Kotlin
    ```
 
-2. Create a `.token` file in the project root with your Discord bot token:
+2. Build the project with Maven:
+   ```
+   mvn clean package
+   ```
+
+3. Create a `.token` file in the project root with your Discord bot token:
    ```
    echo "YOUR_BOT_TOKEN" > .token
    ```
 
-3. Build and run the project with Maven:
-
-   #### Standard JVM Build
+4. Run the bot:
    ```
-   mvn clean package
    java -jar target/Discord-bot-Kotlin-1.0-SNAPSHOT.jar
-   ```
-
-   #### GraalVM Native Image Build
-   ```
-   # Make sure you're using GraalVM
-   $GRAALVM_HOME/bin/java -version  # Should show GraalVM version
-
-   # Build native image
-   mvn clean package -Pnative
-
-   # Run the native executable
-   ./target/Discord-bot-Kotlin
    ```
 
 ## Configuration
@@ -94,36 +84,6 @@ The bot uses Logback for logging. Logs are written to both the console and log f
 - [SQLite JDBC](https://github.com/xerial/sqlite-jdbc): JDBC driver for SQLite
 - [SLF4J](http://www.slf4j.org/): Simple Logging Facade for Java
 - [Logback](https://logback.qos.ch/): Logging implementation for SLF4J
-- [GraalVM](https://www.graalvm.org/): High-performance runtime with native image capabilities
-
-## GraalVM Native Image
-
-This project supports building a native executable using GraalVM's native-image tool. Native images offer several
-advantages:
-
-- **Faster Startup**: Native executables start almost instantly compared to JVM applications
-- **Lower Memory Usage**: Native images have a smaller memory footprint
-- **Reduced Disk Space**: The executable contains only the code paths that are actually used
-- **Simplified Deployment**: No need to install a JVM on the target system
-
-### Native Image Configuration
-
-The project includes the necessary configuration files for GraalVM native-image in
-`src/main/resources/META-INF/native-image/`:
-
-- `reflect-config.json`: Configuration for classes that use reflection
-- `resource-config.json`: Configuration for resources that need to be included in the native image
-- `jni-config.json`: Configuration for JNI (Java Native Interface) calls
-- `proxy-config.json`: Configuration for dynamic proxies
-
-### Native Image Limitations
-
-When using the native image, be aware of these limitations:
-
-- Dynamic class loading and reflection require explicit configuration
-- Some JVM features like JMX are not available
-- Debugging can be more challenging
-- Build times are longer than standard JVM builds
 
 ## Development
 

@@ -5,9 +5,11 @@ import database.DatabaseManager
 import dev.kord.core.Kord
 import dev.kord.gateway.Intent
 import dev.kord.gateway.PrivilegedIntent
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import utils.StatusManager
 import java.io.File
 import java.io.IOException
 import java.nio.file.Files
@@ -80,4 +82,13 @@ suspend fun main() {
 	}
 
 	logger.info("Bot is now online and ready")
+
+	// Initialize the status manager and start periodic status updates
+	val statusManager = StatusManager.getInstance()
+
+	// Set the initial default status
+	statusManager.setInitialStatus(kord)
+
+	// Start periodic status updates
+	statusManager.startStatusUpdates(kord, CoroutineScope(Dispatchers.Default))
 }

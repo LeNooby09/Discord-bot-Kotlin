@@ -23,7 +23,7 @@ class AdminCommand : Command {
 		val args = messageText.split(" ")
 
 		if (args.isEmpty() || args[0].isEmpty()) {
-			event.message.channel.createMessage("Please specify a subcommand: verify, generate, list, remove, add, or flush")
+			event.message.channel.createMessage("Please specify a subcommand: verify, generate, list, remove, add, status, or flush")
 			return false
 		}
 
@@ -47,8 +47,9 @@ class AdminCommand : Command {
 			"remove" -> handleRemoveCommand(event, args)
 			"flush" -> handleFlushCommand(event, args)
 			"add" -> handleAddCommand(event, args)
+			"status" -> handleStatusCommand(event, args)
 			else -> {
-				event.message.channel.createMessage("Unknown subcommand: ${args[0]}. Available subcommands: verify, generate, list, remove, flush, add")
+				event.message.channel.createMessage("Unknown subcommand: ${args[0]}. Available subcommands: verify, generate, list, remove, flush, add, status")
 				false
 			}
 		}
@@ -336,6 +337,16 @@ class AdminCommand : Command {
 			}
 		}
 	}
+
+	/**
+	 * Handles the status subcommand, which allows admins to manage custom bot statuses.
+	 * Delegates to the AdminStatusHandler class for status-related functionality.
+	 */
+	private suspend fun handleStatusCommand(event: MessageCreateEvent, args: List<String>): Boolean {
+		// Delegate to the AdminStatusHandler class
+		return AdminStatusHandler.getInstance().handleStatusCommand(event, args)
+	}
+
 
 	companion object {
 		/**

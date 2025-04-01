@@ -159,8 +159,9 @@ class ServerCustomizationManager private constructor() {
 			connection?.let { conn ->
 				val statement = conn.createStatement()
 				statement.executeUpdate("DELETE FROM server_prefixes")
-				statement.close()
 				logger.debug("Server prefixes deleted")
+
+				statement.close()
 				return true
 			} ?: run {
 				utils.Logger.Database.logNullConnection(logger, "flush server customization data")
@@ -171,6 +172,7 @@ class ServerCustomizationManager private constructor() {
 			return false
 		}
 	}
+
 
 	companion object {
 		private var instance: ServerCustomizationManager? = null

@@ -50,6 +50,12 @@ class DatabaseManager private constructor() {
 			serverCustomizationManager.initialize(connection)
 			serverCustomizationManager.createTables()
 			logger.info("ServerCustomizationManager initialized")
+
+			// Initialize the BotCustomizationManager
+			val botCustomizationManager = BotCustomizationManager.getInstance()
+			botCustomizationManager.initialize(connection)
+			botCustomizationManager.createTables()
+			logger.info("BotCustomizationManager initialized")
 		} catch (e: Exception) {
 			logger.error("Failed to initialize database", e)
 			throw RuntimeException("Failed to initialize database", e)

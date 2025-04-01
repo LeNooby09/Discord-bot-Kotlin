@@ -231,8 +231,11 @@ class CommandRegistry {
 				}
 			}
 
+			// If command name is empty, default to help command
+			val effectiveCommandName = if (commandName.isEmpty()) "help" else commandName
+
 			// Execute the command if it exists
-			val command = commands[commandName]
+			val command = commands[effectiveCommandName]
 			if (command != null) {
 				logger.info("Executing command: ${command.name}")
 				try {
@@ -248,8 +251,8 @@ class CommandRegistry {
 				}
 			} else {
 				// Handle invalid command
-				logger.warn("Unknown command received: $commandName")
-				message.channel.createMessage("Unknown command: $commandName")
+				logger.warn("Unknown command received: $effectiveCommandName")
+				message.channel.createMessage("Unknown command: $effectiveCommandName")
 			}
 		}
 

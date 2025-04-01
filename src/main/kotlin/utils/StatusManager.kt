@@ -34,9 +34,9 @@ class StatusManager private constructor() {
 	 * @param presenceStatus The presence status to set (online, idle, dnd, invisible)
 	 * @return true if the status was set successfully, false otherwise
 	 */
-	suspend fun setPresenceStatus(kord: Kord, presenceStatus: PresenceStatus): Boolean {
+	private suspend fun setPresenceStatus(kord: Kord, presenceStatus: PresenceStatus): Boolean {
 		try {
-			logger.info("Setting bot presence status to ${presenceStatus}")
+			logger.info("Setting bot presence status to $presenceStatus")
 			kord.editPresence {
 				status = presenceStatus
 			}
@@ -140,10 +140,7 @@ class StatusManager private constructor() {
 			// Get the custom status from the database
 			val botCustomizationManager = BotCustomizationManager.getInstance()
 			val customStatus = botCustomizationManager.getCustomStatusById(statusId)
-
-			if (customStatus == null) {
-				return Pair(false, "No custom status found with ID $statusId")
-			}
+				?: return Pair(false, "No custom status found with ID $statusId")
 
 			val (statusText, statusType) = customStatus
 

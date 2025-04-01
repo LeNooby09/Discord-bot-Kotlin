@@ -232,7 +232,7 @@ class CommandRegistry {
 			}
 
 			// If command name is empty, default to help command
-			val effectiveCommandName = if (commandName.isEmpty()) "help" else commandName
+			val effectiveCommandName = commandName.ifEmpty { "help" }
 
 			// Execute the command if it exists
 			val command = commands[effectiveCommandName]

@@ -3,6 +3,7 @@ package database
 import org.slf4j.LoggerFactory
 import java.sql.Connection
 import java.sql.SQLException
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * Manages server customization operations for the bot.
@@ -11,6 +12,9 @@ import java.sql.SQLException
 class ServerCustomizationManager private constructor() {
 	private val logger = LoggerFactory.getLogger(ServerCustomizationManager::class.java)
 	private var connection: Connection? = null
+
+	// Cache for server prefixes to reduce database reads
+	private val prefixCache = ConcurrentHashMap<String, String>()
 
 	/**
 	 * Initializes the ServerCustomizationManager with a database connection.
@@ -48,8 +52,15 @@ class ServerCustomizationManager private constructor() {
 	 * @return The prefix for the server, or "!" if none is set
 	 */
 	fun getServerPrefix(serverId: String): String {
+		// Check cache first
+		val cachedPrefix = prefixCache[serverId]
+		if (cachedPrefix != null) {
+			logger.debug("Cache hit for server prefix $serverId: $cachedPrefix")
+			return cachedPrefix
+		}
+
 		try {
-			logger.debug("Getting prefix for server $serverId")
+			logger.debug("Cache miss for server prefix $serverId, querying database")
 			connection?.let { conn ->
 				val statement = conn.prepareStatement("SELECT prefix FROM server_prefixes WHERE server_id = ?")
 				statement.setString(1, serverId)
@@ -60,12 +71,18 @@ class ServerCustomizationManager private constructor() {
 					resultSet.close()
 					statement.close()
 					logger.debug("Found prefix for server $serverId: $prefix")
+
+					// Cache the result
+					prefixCache[serverId] = prefix
 					return prefix
 				}
 
 				resultSet.close()
 				statement.close()
 				logger.debug("No prefix found for server $serverId, using default")
+
+				// Cache the default prefix
+				prefixCache[serverId] = "!"
 				return "!" // Default prefix
 			} ?: run {
 				utils.Logger.Database.logNullConnection(logger, "get server prefix")
@@ -106,6 +123,9 @@ class ServerCustomizationManager private constructor() {
 				conn.commit()
 				conn.autoCommit = true
 
+				// Update the cache
+				prefixCache[serverId] = prefix
+
 				logger.info("Prefix for server $serverId set to $prefix")
 				return true
 			} ?: run {
@@ -131,6 +151,9 @@ class ServerCustomizationManager private constructor() {
 				statement.setString(1, serverId)
 				val result = statement.executeUpdate() > 0
 				statement.close()
+
+				// Update the cache with the default prefix
+				prefixCache[serverId] = "!"
 
 				if (result) {
 					logger.info("Prefix for server $serverId removed successfully")
@@ -160,6 +183,10 @@ class ServerCustomizationManager private constructor() {
 				val statement = conn.createStatement()
 				statement.executeUpdate("DELETE FROM server_prefixes")
 				logger.debug("Server prefixes deleted")
+
+				// Clear the prefix cache
+				prefixCache.clear()
+				logger.debug("Server prefix cache cleared")
 
 				statement.close()
 				return true

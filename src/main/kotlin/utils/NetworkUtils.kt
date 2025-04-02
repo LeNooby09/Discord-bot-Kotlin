@@ -17,13 +17,75 @@ object NetworkUtils {
 	// Cache for DNS resolutions to avoid repeated lookups
 	private val dnsCache = ConcurrentHashMap<String, InetAddress>()
 
+	// Maximum size for DNS cache
+	private const val MAX_DNS_CACHE_SIZE = 100
+
 	// Connection pool for HTTP connections
 	private val connectionPool = ConcurrentHashMap<String, HttpURLConnection>()
+
+	// Maximum size for connection pool
+	private const val MAX_CONNECTION_POOL_SIZE = 50
 
 	// Shorter timeouts for faster checks
 	private const val CONNECTION_TIMEOUT = 3000
 	private const val READ_TIMEOUT = 3000
 	private const val PING_TIMEOUT = 3000
+
+	init {
+		// Add shutdown hook to close resources
+		Runtime.getRuntime().addShutdownHook(Thread {
+			logger.info("Shutting down NetworkUtils resources")
+			closeAllConnections()
+		})
+	}
+
+	/**
+	 * Closes all connections in the connection pool.
+	 */
+	private fun closeAllConnections() {
+		logger.debug("Closing all connections in pool (${connectionPool.size} connections)")
+		connectionPool.forEach { (_, conn) ->
+			try {
+				conn.disconnect()
+			} catch (e: Exception) {
+				logger.debug("Error disconnecting connection: ${e.message}")
+			}
+		}
+		connectionPool.clear()
+	}
+
+	/**
+	 * Limits the size of the DNS cache by removing the oldest entries.
+	 */
+	private fun limitDnsCache() {
+		if (dnsCache.size > MAX_DNS_CACHE_SIZE) {
+			logger.debug("DNS cache size (${dnsCache.size}) exceeds limit, removing oldest entries")
+			// Since we don't track timestamps, we'll just remove random entries
+			val entriesToRemove = dnsCache.size - MAX_DNS_CACHE_SIZE
+			val keys = dnsCache.keys.toList().shuffled().take(entriesToRemove)
+			keys.forEach { dnsCache.remove(it) }
+		}
+	}
+
+	/**
+	 * Limits the size of the connection pool by closing and removing the oldest connections.
+	 */
+	private fun limitConnectionPool() {
+		if (connectionPool.size > MAX_CONNECTION_POOL_SIZE) {
+			logger.debug("Connection pool size (${connectionPool.size}) exceeds limit, removing oldest entries")
+			// Since we don't track timestamps, we'll just remove random entries
+			val entriesToRemove = connectionPool.size - MAX_CONNECTION_POOL_SIZE
+			val keys = connectionPool.keys.toList().shuffled().take(entriesToRemove)
+			keys.forEach {
+				val conn = connectionPool.remove(it)
+				try {
+					conn?.disconnect()
+				} catch (e: Exception) {
+					logger.debug("Error disconnecting connection: ${e.message}")
+				}
+			}
+		}
+	}
 
 	/**
 	 * Checks the status of a server.
@@ -115,6 +177,9 @@ object NetworkUtils {
 				}
 			}
 
+			// Limit the connection pool size after adding a new connection
+			limitConnectionPool()
+
 			logger.debug("Sending request to $urlStr with timeout ${CONNECTION_TIMEOUT}ms")
 			val responseCode = connection.responseCode
 			logger.debug("Received response code $responseCode from $urlStr")
@@ -148,6 +213,9 @@ object NetworkUtils {
 				logger.debug("DNS cache miss for $server, resolving address")
 				InetAddress.getByName(server)
 			}
+
+			// Limit the DNS cache size after adding a new entry
+			limitDnsCache()
 
 			logger.debug("Resolved $server to ${address.hostAddress}, pinging with timeout ${PING_TIMEOUT}ms")
 

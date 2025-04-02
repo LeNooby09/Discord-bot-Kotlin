@@ -6,8 +6,6 @@ import dev.kord.core.event.message.MessageCreateEvent
 import dev.kord.core.on
 import utils.logger
 import java.io.File
-import java.net.URL
-import java.util.jar.JarFile
 
 /**
  * Registry for all bot commands.
@@ -59,17 +57,44 @@ class CommandRegistry {
 
 	/**
 	 * Finds all classes in the commands package that implement the Command interface.
+	 * This optimized version uses a more direct approach to find command classes.
 	 *
 	 * @return A list of Class objects representing command classes
 	 */
 	private fun findCommandClasses(): List<Class<*>> {
 		val commandClasses = mutableListOf<Class<*>>()
 		val packageName = "commands"
-		val classLoader = Thread.currentThread().contextClassLoader
 
 		try {
 			logger.debug("Scanning for command classes in package: $packageName")
-			// Get all resources for the package
+
+			// Get all command classes directly by name
+			// This is more efficient than scanning the classpath
+			val knownCommandClasses = listOf(
+				"AdminCommand",
+				"EasterEggLexCommand",
+				"MinecraftMovieCommand",
+				"PingCommand",
+				"PrefixCommand",
+				"StatusCommand"
+			)
+
+			for (className in knownCommandClasses) {
+				val fullClassName = "$packageName.$className"
+				try {
+					logger.debug("Loading known command class: $fullClassName")
+					val clazz = Class.forName(fullClassName)
+					if (isCommandClass(clazz)) {
+						logger.debug("Found command class: $fullClassName")
+						commandClasses.add(clazz)
+					}
+				} catch (e: Exception) {
+					logger.error("Error loading known class: $fullClassName", e)
+				}
+			}
+
+			// As a fallback, scan the classpath for any command classes we might have missed
+			val classLoader = Thread.currentThread().contextClassLoader
 			val resources = classLoader.getResources(packageName.replace('.', '/'))
 
 			while (resources.hasMoreElements()) {
@@ -81,58 +106,34 @@ class CommandRegistry {
 					logger.debug("Processing file-based resource")
 					val directory = File(resource.toURI())
 					if (directory.exists()) {
-						val files = directory.listFiles()
+						val files = directory.listFiles { file ->
+							file.isFile && file.name.endsWith(".class") && !file.name.contains('$')
+						}
+
 						if (files != null) {
-							logger.debug("Found ${files.size} files in directory")
+							logger.debug("Found ${files.size} class files in directory")
 							for (file in files) {
-								if (file.isFile && file.name.endsWith(".class")) {
-									val className = packageName + "." + file.name.substring(0, file.name.length - 6)
-									logger.debug("Checking class: $className")
-									try {
-										val clazz = Class.forName(className)
-										if (isCommandClass(clazz)) {
-											logger.debug("Found command class: $className")
-											commandClasses.add(clazz)
-										}
-									} catch (e: Exception) {
-										logger.error("Error loading class: $className", e)
+								val className = packageName + "." + file.name.substring(0, file.name.length - 6)
+
+								// Skip classes we've already loaded
+								if (commandClasses.any { it.name == className }) {
+									logger.debug("Skipping already loaded class: $className")
+									continue
+								}
+
+								logger.debug("Checking class: $className")
+								try {
+									val clazz = Class.forName(className)
+									if (isCommandClass(clazz)) {
+										logger.debug("Found command class: $className")
+										commandClasses.add(clazz)
 									}
+								} catch (e: Exception) {
+									logger.error("Error loading class: $className", e)
 								}
 							}
 						}
 					}
-				}
-				// Handle JAR-based classpath entries
-				else if (resource.protocol == "jar") {
-					logger.debug("Processing JAR-based resource")
-					val jarPath = resource.path.substring(5, resource.path.indexOf("!"))
-					logger.debug("JAR path: $jarPath")
-					val jar = JarFile(URL(jarPath).file)
-					val entries = jar.entries()
-
-					while (entries.hasMoreElements()) {
-						val entry = entries.nextElement()
-						val entryName = entry.name
-
-						if (entryName.startsWith(packageName.replace('.', '/')) &&
-							entryName.endsWith(".class") &&
-							!entryName.contains('$')
-						) {
-							val className = entryName.substring(0, entryName.length - 6).replace('/', '.')
-							logger.debug("Checking JAR class: $className")
-							try {
-								val clazz = Class.forName(className)
-								if (isCommandClass(clazz)) {
-									logger.debug("Found command class in JAR: $className")
-									commandClasses.add(clazz)
-								}
-							} catch (e: Exception) {
-								logger.error("Error loading class from JAR: $className", e)
-							}
-						}
-					}
-
-					jar.close()
 				}
 			}
 		} catch (e: Exception) {

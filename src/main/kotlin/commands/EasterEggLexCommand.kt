@@ -7,7 +7,7 @@ import dev.kord.core.event.message.MessageCreateEvent
  * Easter egg command that responds with a special message when a specific prefix is set.
  * This command only works if the server's prefix is set to a specific value.
  */
-class LexCommand : Command {
+class EasterEggLexCommand : Command {
 	override val name = "lex"
 	override val description = "A mysterious command"
 

@@ -3,6 +3,7 @@ package commands
 import database.DatabaseManager
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.message.MessageCreateEvent
+import utils.PrefixManager
 
 /**
  * Command that allows server administrators to manage the custom prefix for their server.
@@ -16,6 +17,7 @@ class PrefixCommand : Command {
 		val messageText = extractMessageText(event)
 		val args = messageText.split(" ").filter { it.isNotEmpty() }
 		val dbManager = DatabaseManager.getInstance()
+		val prefixManager = PrefixManager.getInstance()
 
 		// Check if this is a DM channel
 		val isDM = event.message.getChannel().type == dev.kord.common.entity.ChannelType.DM
@@ -53,7 +55,7 @@ class PrefixCommand : Command {
 		// Handle subcommands
 		if (args.isEmpty()) {
 			// Display current prefix
-			val currentPrefix = dbManager.getServerPrefix(serverId)
+			val currentPrefix = prefixManager.getServerPrefix(serverId)
 			event.message.channel.createMessage("Current prefix for this server: `$currentPrefix`")
 			return true
 		}
@@ -71,7 +73,7 @@ class PrefixCommand : Command {
 					return false
 				}
 
-				if (dbManager.setServerPrefix(serverId, newPrefix)) {
+				if (prefixManager.setServerPrefix(serverId, newPrefix)) {
 					event.message.channel.createMessage("Server prefix set to: `$newPrefix`")
 					return true
 				} else {
@@ -81,7 +83,7 @@ class PrefixCommand : Command {
 			}
 
 			"reset" -> {
-				if (dbManager.removeServerPrefix(serverId)) {
+				if (prefixManager.removeServerPrefix(serverId)) {
 					event.message.channel.createMessage("Server prefix reset to default: `!`")
 					return true
 				} else {

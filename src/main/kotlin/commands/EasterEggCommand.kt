@@ -1,7 +1,7 @@
 package commands
 
-import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
+import utils.PrefixManager
 
 /**
  * Base class for easter egg commands that respond with special messages when specific prefixes are set.
@@ -31,8 +31,8 @@ abstract class EasterEggCommand : Command {
 		}
 
 		// Get the server's prefix
-		val dbManager = DatabaseManager.getInstance()
-		val serverPrefix = dbManager.getServerPrefix(serverId)
+		val prefixManager = PrefixManager.getInstance()
+		val serverPrefix = prefixManager.getServerPrefix(serverId)
 
 		// Check if the server's prefix matches the easter egg prefix
 		if (serverPrefix == easterEggPrefix) {

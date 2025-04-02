@@ -1,21 +1,10 @@
 package commands
 
-import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
 import org.slf4j.Logger
+import utils.BotConfig
+import utils.PrefixManager
 import utils.logger
-
-/**
- * Configuration for the bot.
- * This is used to store global configuration values that are used across the bot.
- */
-object BotConfig {
-	/**
-	 * The bot's mention string used in commands.
-	 * This is set in main.kt when the bot starts.
-	 */
-	var mention: String = "<@1327594330130481272>" // Default value, will be overridden in main.kt
-}
 
 /**
  * Interface for all bot commands.
@@ -79,8 +68,8 @@ interface Command {
 				logger.error("Failed to get guild ID in extractMessageText", e)
 				return content.trim().removePrefix(nameToRemove).trim()
 			}
-			val dbManager = DatabaseManager.getInstance()
-			val serverPrefix = dbManager.getServerPrefix(serverId)
+			val prefixManager = PrefixManager.getInstance()
+			val serverPrefix: String = prefixManager.getServerPrefix(serverId)
 
 			// Check which prefix was used and remove it
 			return when {

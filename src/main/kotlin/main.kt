@@ -1,5 +1,4 @@
 import commands.AdminCommand
-import commands.BotConfig
 import commands.CommandRegistry
 import database.DatabaseManager
 import dev.kord.core.Kord
@@ -9,6 +8,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
+import utils.BotConfig
 import utils.StatusManager
 import java.io.File
 import java.io.IOException

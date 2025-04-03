@@ -32,7 +32,7 @@ class HelpCommand(private val commandRegistry: CommandRegistry) : Command {
 		logger.debug("Showing help for command: $commandName")
 
 		val command = commandRegistry.allCommands[commandName]
-		if (command == null) {
+		if (command == null || command is EasterEggCommand) {
 			event.message.channel.createMessage("Unknown command: $commandName")
 			return false
 		}
@@ -60,9 +60,12 @@ class HelpCommand(private val commandRegistry: CommandRegistry) : Command {
 			if (commands.isEmpty()) {
 				append("No commands available.")
 			} else {
-				commands.values.sortedBy { it.name }.forEach { command ->
-					append("**${command.name}** - ${command.description}\n")
-				}
+				commands.values
+					.filterNot { it is EasterEggCommand }  // Filter out easter egg commands
+					.sortedBy { it.name }
+					.forEach { command ->
+						append("**${command.name}** - ${command.description}\n")
+					}
 
 				append("\nUse `help <command>` for more details about a specific command.")
 			}

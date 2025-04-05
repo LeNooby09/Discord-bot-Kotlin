@@ -1,4 +1,4 @@
-package commands.status
+package commands.status.functions
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -8,12 +8,11 @@ import utils.ServerUtils
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Utility class for status check functionality.
- * This class is no longer a Command and is only used internally by StatusCommand.
- * The functionality has been extracted to separate handler classes.
+ * Utility class for checking server status.
+ * Provides caching to reduce network calls.
  */
-class StatusCheckCommand {
-	private val logger = LoggerFactory.getLogger(StatusCheckCommand::class.java)
+object ServerStatusChecker {
+	private val logger = LoggerFactory.getLogger(ServerStatusChecker::class.java)
 
 	// Cache for server status to reduce network calls
 	private val serverStatusCache = ConcurrentHashMap<String, Pair<Boolean, Long>>()
@@ -52,22 +51,6 @@ class StatusCheckCommand {
 			// Update cache with new result
 			serverStatusCache[normalizedServer] = Pair(status, currentTime)
 			status
-		}
-	}
-
-	companion object {
-		private var instance: StatusCheckCommand? = null
-
-		/**
-		 * Gets the singleton instance of the StatusCheckCommand.
-		 * @return The StatusCheckCommand instance
-		 */
-		@Synchronized
-		fun getInstance(): StatusCheckCommand {
-			if (instance == null) {
-				instance = StatusCheckCommand()
-			}
-			return instance!!
 		}
 	}
 }

@@ -1,5 +1,6 @@
 package commands.status
 
+import database.DatabaseManager
 import dev.kord.core.event.message.MessageCreateEvent
 import kotlinx.coroutines.*
 import kotlin.time.Duration.Companion.seconds
@@ -15,6 +16,9 @@ class StatusMonitorCommand : commands.Command {
 	// Reference to the data manager and check command
 	private val dataManager = StatusDataCommand.getInstance()
 	private val checkCommand = StatusCheckCommand.getInstance()
+
+	// Database manager for admin checks
+	private val dbManager = DatabaseManager.getInstance()
 
 	// Background job for monitoring servers
 	private var monitorJob: Job? = null
@@ -35,6 +39,13 @@ class StatusMonitorCommand : commands.Command {
 
 		if (args.isEmpty() || args[0].isEmpty()) {
 			event.message.channel.createMessage("Please specify a subcommand: start, stop, or status")
+			return false
+		}
+
+		// Check if the user is an admin
+		val userId = event.message.author?.id?.value?.toString() ?: return false
+		if (!dbManager.isAdmin(userId)) {
+			event.message.channel.createMessage("You need to be a bot admin to use status monitoring commands.")
 			return false
 		}
 

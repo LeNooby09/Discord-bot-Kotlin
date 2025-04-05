@@ -1,9 +1,13 @@
 package commands
 
+import commands.prefix.functions.DisplayCommandHandler
+import commands.prefix.functions.HelpCommandHandler
+import commands.prefix.functions.ResetCommandHandler
+import commands.prefix.functions.SetCommandHandler
 import database.DatabaseManager
 import dev.kord.common.entity.Permission
 import dev.kord.core.event.message.MessageCreateEvent
-import utils.PrefixManager
+import org.slf4j.LoggerFactory
 
 /**
  * Command that allows server administrators to manage the custom prefix for their server.
@@ -12,12 +16,12 @@ import utils.PrefixManager
 class PrefixCommand : Command {
 	override val name = "prefix"
 	override val description = "Manage the custom prefix for this server (server admin only)"
+	override val logger = LoggerFactory.getLogger(PrefixCommand::class.java)
+	private val dbManager = DatabaseManager.getInstance()
 
 	override suspend fun execute(event: MessageCreateEvent): Boolean {
 		val messageText = extractMessageText(event)
 		val args = messageText.split(" ").filter { it.isNotEmpty() }
-		val dbManager = DatabaseManager.getInstance()
-		val prefixManager = PrefixManager.getInstance()
 
 		// Check if this is a DM channel
 		val isDM = event.message.getChannel().type == dev.kord.common.entity.ChannelType.DM
@@ -55,65 +59,19 @@ class PrefixCommand : Command {
 		// Handle subcommands
 		if (args.isEmpty()) {
 			// Display current prefix
-			val currentPrefix = prefixManager.getServerPrefix(serverId)
-			event.message.channel.createMessage("Current prefix for this server: `$currentPrefix`")
-			return true
+			return DisplayCommandHandler.handleDisplayCommand(event, serverId)
 		}
 
-		when (args[0].lowercase()) {
-			"set" -> {
-				if (args.size < 2) {
-					event.message.channel.createMessage("Please specify a prefix to set. Usage: `prefix set <new_prefix>`")
-					return false
-				}
+		val subcommand = args[0].lowercase()
+		val subArgs = if (args.size > 1) args.subList(1, args.size) else emptyList()
 
-				val newPrefix = args[1]
-				if (newPrefix.length > 10) {
-					event.message.channel.createMessage("Prefix must be 10 characters or less.")
-					return false
-				}
-
-				if (prefixManager.setServerPrefix(serverId, newPrefix)) {
-					event.message.channel.createMessage("Server prefix set to: `$newPrefix`")
-					return true
-				} else {
-					event.message.channel.createMessage("Failed to set server prefix.")
-					return false
-				}
-			}
-
-			"reset" -> {
-				if (prefixManager.removeServerPrefix(serverId)) {
-					event.message.channel.createMessage("Server prefix reset to default: `!`")
-					return true
-				} else {
-					event.message.channel.createMessage("Failed to reset server prefix.")
-					return false
-				}
-			}
-
-			"help" -> {
-				val helpMessage = """
-                    **Prefix Command Help**
-
-                    Manage the custom prefix for this server (server admin only).
-
-                    **Subcommands:**
-                    > `prefix` - Display the current prefix
-                    > `prefix set <new_prefix>` - Set a new prefix
-                    > `prefix reset` - Reset to the default prefix (!)
-                    > `prefix help` - Show this help message
-
-                    Note: The bot will always respond to its mention regardless of the custom prefix.
-                """.trimIndent()
-
-				event.message.channel.createMessage(helpMessage)
-				return true
-			}
-
+		return when (subcommand) {
+			"set" -> SetCommandHandler.handleSetCommand(event, subArgs, serverId)
+			"reset" -> ResetCommandHandler.handleResetCommand(event, serverId)
+			"help" -> HelpCommandHandler.handleHelpCommand(event)
 			else -> {
 				event.message.channel.createMessage("Unknown subcommand. Use `prefix help` for usage information.")
-				return false
+				false
 			}
 		}
 	}
